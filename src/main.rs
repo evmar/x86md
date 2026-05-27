@@ -7,21 +7,15 @@ struct Fragment {
     text: String,
 }
 
-fn text_adjusted_text(array: &[TextDrawAdjusted]) -> String {
-    let mut text = String::new();
-    for item in array {
-        if let TextDrawAdjusted::Text(s) = item {
-            text.push_str(&s.to_string_lossy());
-        }
-    }
-    text
-}
-
 fn extract_fragments(ops: &[Op]) -> Vec<Fragment> {
     let mut fragments = Vec::new();
 
-    let mut text_matrix = Matrix::default();
-    let mut line_matrix = Matrix::default();
+    // matrix:
+    //   (a, d): font w/h
+    //   (b, c): shear (unused)
+    //   (e, f): translation x/y
+    let mut line_matrix = Matrix::default(); // start of line
+    let mut text_matrix = Matrix::default(); // current text position
     let mut leading = 0.0;
 
     for op in ops {
@@ -36,13 +30,14 @@ fn extract_fragments(ops: &[Op]) -> Vec<Fragment> {
             }
 
             Op::MoveTextPosition { translation } => {
-                text_matrix.e += translation.x;
-                text_matrix.f += translation.y;
+                // translation is in text units, needs to be scaled by font size
+                text_matrix.e += translation.x * line_matrix.a;
+                text_matrix.f += translation.y * line_matrix.d;
                 line_matrix = text_matrix;
             }
 
             Op::TextNewline => {
-                line_matrix.f -= leading;
+                line_matrix.f -= leading * line_matrix.d;
                 text_matrix = line_matrix;
             }
 
@@ -55,10 +50,19 @@ fn extract_fragments(ops: &[Op]) -> Vec<Fragment> {
             }
 
             Op::TextDrawAdjusted { array } => {
+                let mut text = String::new();
+                for item in array {
+                    match item {
+                        TextDrawAdjusted::Text(s) => {
+                            text.push_str(&format!("({})", &s.to_string_lossy()));
+                        }
+                        TextDrawAdjusted::Spacing(_) => {}
+                    }
+                }
                 fragments.push(Fragment {
                     x: text_matrix.e,
                     y: text_matrix.f,
-                    text: text_adjusted_text(array),
+                    text,
                 });
             }
 
@@ -79,7 +83,9 @@ fn main() {
     let page = file.get_page(first_page).unwrap();
     let content = page.contents.as_ref().unwrap();
     let ops = content.operations(&resolver).unwrap();
-    for fragment in extract_fragments(&ops) {
+    let mut fragments = extract_fragments(&ops);
+    fragments.sort_by(|a, b| b.y.total_cmp(&a.y).then(a.x.total_cmp(&b.x)));
+    for fragment in fragments {
         println!("{:7.2} {:7.2} {}", fragment.x, fragment.y, fragment.text);
     }
 }
