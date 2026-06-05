@@ -2,13 +2,15 @@ use pdf::content::{Matrix, Op, TextDrawAdjusted};
 
 #[derive(Debug)]
 struct Fragment {
+    font: pdf::primitive::Name,
     x: f32,
     y: f32,
     text: String,
 }
 
-fn extract_fragments(ops: &[Op]) -> Vec<Fragment> {
+fn extract_fragments(ops: Vec<Op>) -> Vec<Fragment> {
     let mut fragments = Vec::new();
+    let mut rects = Vec::new();
 
     // matrix:
     //   (a, d): font w/h
@@ -17,16 +19,21 @@ fn extract_fragments(ops: &[Op]) -> Vec<Fragment> {
     let mut line_matrix = Matrix::default(); // start of line
     let mut text_matrix = Matrix::default(); // current text position
     let mut leading = 0.0;
+    let mut font = pdf::primitive::Name::from("");
 
     for op in ops {
         match op {
+            Op::TextFont { name, .. } => {
+                font = name;
+            }
+
             Op::Leading { leading: value } => {
-                leading = *value;
+                leading = value;
             }
 
             Op::SetTextMatrix { matrix } => {
-                text_matrix = *matrix;
-                line_matrix = *matrix;
+                text_matrix = matrix;
+                line_matrix = matrix;
             }
 
             Op::MoveTextPosition { translation } => {
@@ -43,6 +50,7 @@ fn extract_fragments(ops: &[Op]) -> Vec<Fragment> {
 
             Op::TextDraw { text } => {
                 fragments.push(Fragment {
+                    font: font.clone(),
                     x: text_matrix.e,
                     y: text_matrix.f,
                     text: text.to_string_lossy(),
@@ -55,20 +63,41 @@ fn extract_fragments(ops: &[Op]) -> Vec<Fragment> {
                     match item {
                         TextDrawAdjusted::Text(s) => {
                             text.push_str(&format!("({})", &s.to_string_lossy()));
+                            // text.push_str(&format!("{}", &s.to_string_lossy()));
                         }
-                        TextDrawAdjusted::Spacing(_) => {}
+                        TextDrawAdjusted::Spacing(s) => {
+                            if s < -100.0 {
+                                fragments.push(Fragment {
+                                    font: font.clone(),
+                                    x: text_matrix.e,
+                                    y: text_matrix.f,
+                                    text,
+                                });
+                                text = String::new();
+                            }
+                        }
                     }
                 }
-                fragments.push(Fragment {
-                    x: text_matrix.e,
-                    y: text_matrix.f,
-                    text,
-                });
+
+                if !text.is_empty() {
+                    fragments.push(Fragment {
+                        font: font.clone(),
+                        x: text_matrix.e,
+                        y: text_matrix.f,
+                        text,
+                    });
+                }
+            }
+
+            Op::Rect { rect } => {
+                rects.push(rect);
             }
 
             _ => {}
         }
     }
+
+    // println!("rect {:#?}", rects);
 
     fragments
 }
@@ -83,9 +112,12 @@ fn main() {
     let page = file.get_page(first_page).unwrap();
     let content = page.contents.as_ref().unwrap();
     let ops = content.operations(&resolver).unwrap();
-    let mut fragments = extract_fragments(&ops);
+    let mut fragments = extract_fragments(ops);
     fragments.sort_by(|a, b| b.y.total_cmp(&a.y).then(a.x.total_cmp(&b.x)));
     for fragment in fragments {
-        println!("{:7.2} {:7.2} {}", fragment.x, fragment.y, fragment.text);
+        println!(
+            "{:7.2} {:7.2} {} {}",
+            fragment.x, fragment.y, fragment.font, fragment.text
+        );
     }
 }
