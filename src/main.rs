@@ -24,6 +24,7 @@ fn main() -> std::io::Result<()> {
         settings,
     );
 
+    let mut pages_written = vec![];
     let mut full_page = vec![];
     for page in FIRST_PAGE..=LAST_PAGE {
         eprintln!("processing {}", page);
@@ -33,13 +34,24 @@ fn main() -> std::io::Result<()> {
         let doc = analyze(device.lines);
         if let Block::Text(Font::Heading, title) = &doc[0] {
             if !full_page.is_empty() {
-                write_file(out_dir, std::mem::take(&mut full_page))?;
+                let name = write_file(out_dir, std::mem::take(&mut full_page))?;
+                pages_written.push(name);
             }
             eprintln!("{page}: {title}");
         }
         full_page.extend(doc);
     }
-    write_file(out_dir, full_page)?;
+    pages_written.push(write_file(out_dir, full_page)?);
+
+    std::fs::write(
+        format!("{out_dir}/index.md"),
+        pages_written
+            .iter()
+            .map(|name| format!("- [{name}]({name}.md)"))
+            .collect::<Vec<_>>()
+            .join("\n"),
+    )?;
+
     Ok(())
 }
 
