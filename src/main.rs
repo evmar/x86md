@@ -43,15 +43,24 @@ fn main() -> std::io::Result<()> {
     }
     pages_written.push(write_file(out_dir, full_page)?);
 
-    std::fs::write(
-        format!("{out_dir}/index.md"),
-        pages_written
+    index_page(out_dir, &pages_written)?;
+
+    Ok(())
+}
+
+fn index_page(out_dir: &str, pages: &[String]) -> std::io::Result<()> {
+    use std::io::Write;
+    let mut f = std::fs::File::create(format!("{out_dir}/index.md"))?;
+    f.write(&std::fs::read("README.md")?)?;
+    f.write(b"\n## Generated pages\n")?;
+    f.write(
+        pages
             .iter()
             .map(|name| format!("- [{name}]({name}.md)"))
             .collect::<Vec<_>>()
-            .join("\n"),
+            .join("\n")
+            .as_bytes(),
     )?;
-
     Ok(())
 }
 
