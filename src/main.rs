@@ -2,13 +2,6 @@ use std::collections::HashMap;
 
 use hayro_interpret::{Context, InterpreterCache, InterpreterSettings, hayro_syntax::Pdf};
 
-// for computing when subsequent lines are part of the same paragraph
-const MAX_LINE_HEIGHT: u32 = 150;
-
-// for computing indentation in monospace blocks
-const LEFT_MARGIN: u32 = 460;
-const MONOSPACE_WIDTH: f32 = 50.0;
-
 fn main() {
     let args = std::env::args().collect::<Vec<_>>();
     let data = std::fs::read(&args[1]).unwrap();
@@ -28,28 +21,10 @@ fn main() {
         settings,
     );
 
-    let mut doc = Doc::default();
+    let mut doc = Device::default();
     hayro_interpret::interpret_page(page, &mut context, &mut doc);
     doc.postprocess();
     doc.render();
-}
-
-#[derive(Debug, Clone)]
-struct Coord {
-    x: u32,
-    y: u32,
-}
-
-impl From<kurbo::Vec2> for Coord {
-    fn from(v: kurbo::Vec2) -> Self {
-        fn to_fixed(f: f64) -> u32 {
-            (f * 10.0) as u32
-        }
-        Coord {
-            x: to_fixed(v.x),
-            y: to_fixed(v.y),
-        }
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -63,7 +38,8 @@ enum Font {
 
 #[derive(Debug, Clone)]
 struct Fragment {
-    pos: Coord,
+    x: u32,
+    y: u32,
     font: Font,
     text: String,
 }
@@ -75,7 +51,7 @@ struct Line {
 }
 
 #[derive(Default)]
-struct Doc {
+struct Device {
     // It is pretty difficult to figure out the font of a glyph in hayro because it
     // resolves the font rather than giving you the font id from the raw PDF format.
     // This map is keyed off of the `(font_cache_key, scale)` of the glyphs.
@@ -83,7 +59,7 @@ struct Doc {
     lines: Vec<Line>,
 }
 
-impl Doc {
+impl Device {
     fn font_id(
         &mut self,
         glyph_transform: &kurbo::Affine,
@@ -131,17 +107,20 @@ impl Doc {
     }
 
     fn join_fragments(&mut self) {
+        // for computing when subsequent glyphs are part of the same span
+        const MAX_GLYPH_WIDTH: u32 = 100;
+
         let mut new_lines = vec![];
         for line in self.lines.drain(..) {
             let mut frags = line.frags;
-            frags.sort_by_key(|f| f.pos.x);
+            frags.sort_by_key(|f| f.x);
             let mut joined = vec![];
-            let mut x = frags[0].pos.x;
+            let mut x = frags[0].x;
             let mut cur = frags[0].clone();
             for frag in frags.into_iter().skip(1) {
-                let delta = frag.pos.x - x;
-                x = frag.pos.x;
-                if delta < 100 {
+                let delta = frag.x - x;
+                x = frag.x;
+                if delta < MAX_GLYPH_WIDTH {
                     cur.text.push_str(&frag.text);
                 } else {
                     joined.push(cur);
@@ -150,7 +129,7 @@ impl Doc {
             }
             joined.push(cur);
             new_lines.push(Line {
-                y: joined[0].pos.y,
+                y: joined[0].y,
                 frags: joined,
             });
         }
@@ -158,6 +137,13 @@ impl Doc {
     }
 
     fn join_paragraphs(&mut self) {
+        // for computing when subsequent lines are part of the same paragraph
+        const MAX_LINE_HEIGHT: u32 = 150;
+
+        // for computing indentation in monospace blocks
+        const LEFT_MARGIN: u32 = 460;
+        const MONOSPACE_WIDTH: f32 = 50.0;
+
         for i in (1..self.lines.len() - 1).rev() {
             let [cur, prev] = self.lines.get_disjoint_mut([i, i - 1]).unwrap();
             if cur.frags.len() != 1 || prev.frags.len() != 1 {
@@ -171,7 +157,7 @@ impl Doc {
             if delta < MAX_LINE_HEIGHT {
                 if cur.frags[0].font == Font::Code {
                     // These constants found manually :(
-                    let indent = (cur.frags[0].pos.x - LEFT_MARGIN) as f32 / MONOSPACE_WIDTH as f32;
+                    let indent = (cur.frags[0].x - LEFT_MARGIN) as f32 / MONOSPACE_WIDTH as f32;
                     prev.frags[0]
                         .text
                         .push_str(&format!("\n{}", " ".repeat(indent as usize)));
@@ -207,7 +193,7 @@ impl Doc {
     }
 }
 
-impl hayro_interpret::Device<'_> for Doc {
+impl hayro_interpret::Device<'_> for Device {
     fn draw_path(
         &mut self,
         _path: &kurbo::BezPath,
@@ -240,21 +226,18 @@ impl hayro_interpret::Device<'_> for Doc {
         assert!(!text.is_empty());
 
         // _transform always identity
-        let pos: Coord = glyph_transform.translation().into();
-        let line = match self.lines.binary_search_by_key(&pos.y, |l| l.y) {
+        let pos = glyph_transform.translation();
+        let x = (pos.x * 10.0) as u32;
+        let y = (pos.y * 10.0) as u32;
+
+        let line = match self.lines.binary_search_by_key(&y, |l| l.y) {
             Ok(i) => &mut self.lines[i],
             Err(i) => {
-                self.lines.insert(
-                    i,
-                    Line {
-                        y: pos.y,
-                        frags: vec![],
-                    },
-                );
+                self.lines.insert(i, Line { y, frags: vec![] });
                 &mut self.lines[i]
             }
         };
-        line.frags.push(Fragment { pos, font, text });
+        line.frags.push(Fragment { x, y, font, text });
     }
 
     fn draw_image(&mut self, _image: hayro_interpret::Image<'_, '_>, _transform: kurbo::Affine) {
