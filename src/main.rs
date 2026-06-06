@@ -106,6 +106,7 @@ impl Device {
         self.join_paragraphs();
     }
 
+    /// For all the fragments that are within the same line, join them into a single fragment if they are close enough together.
     fn join_fragments(&mut self) {
         // for computing when subsequent glyphs are part of the same span
         const MAX_GLYPH_WIDTH: u32 = 100;
@@ -136,6 +137,7 @@ impl Device {
         self.lines = new_lines;
     }
 
+    /// For all the lines that are part of the same paragraph, join them into a single span of text if they are close enough together.
     fn join_paragraphs(&mut self) {
         // for computing when subsequent lines are part of the same paragraph
         const MAX_LINE_HEIGHT: u32 = 150;
@@ -168,6 +170,7 @@ impl Device {
         }
     }
 
+    /// Dump self as Markdown.
     fn render(&self) {
         for line in &self.lines {
             if line.frags.len() == 1 {
