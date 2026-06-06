@@ -21,18 +21,20 @@ fn main() {
         settings,
     );
 
-    let mut doc = Device::default();
-    hayro_interpret::interpret_page(page, &mut context, &mut doc);
-    postprocess(&mut doc.lines);
-    render(&doc.lines);
+    let mut device = Device::default();
+    hayro_interpret::interpret_page(page, &mut context, &mut device);
+    let doc = analyze(device.lines);
+    render(doc);
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Font {
     Heading,
     SubHeading,
+    TableHeading,
     Body,
     Code,
+    Footer,
     Unknown(String, u32),
 }
 
@@ -47,6 +49,11 @@ struct Fragment {
 struct Line {
     y: u32,
     frags: Vec<Fragment>,
+}
+
+enum Block {
+    Text(Font, String),
+    Table(Vec<(Font, Vec<String>)>),
 }
 
 #[derive(Default)]
@@ -91,19 +98,21 @@ impl Device {
         let font = match (name, scale) {
             ("NeoSansIntelMedium", 12) => Font::Heading,
             ("NeoSansIntelMedium", 10) => Font::SubHeading,
+            ("NeoSansIntelMedium", 9) => Font::TableHeading,
+            ("NeoSansIntel", 8) => Font::Footer,
             ("Verdana", 9) => Font::Body,
             ("NeoSansIntel", 9) => Font::Code,
-            (name, scale) => Font::Unknown(name.to_string(), scale),
+            _ => Font::Unknown(name.to_string(), scale),
         };
         self.fonts.insert((key, scale), font.clone());
         font
     }
 }
 
-fn postprocess(lines: &mut Vec<Line>) {
+fn analyze(mut lines: Vec<Line>) -> Vec<Block> {
     lines.reverse();
-    join_fragments(lines);
-    join_paragraphs(lines);
+    join_fragments(&mut lines);
+    join_paragraphs(lines)
 }
 
 /// For all the fragments that are within the same line, join them into a single fragment if they are close enough together.
@@ -133,7 +142,7 @@ fn join_fragments(lines: &mut [Line]) {
 }
 
 /// For all the lines that are part of the same paragraph, join them into a single span of text if they are close enough together.
-fn join_paragraphs(lines: &mut Vec<Line>) {
+fn join_paragraphs(mut lines: Vec<Line>) -> Vec<Block> {
     // These constants found manually :(
     // for computing when subsequent lines are part of the same paragraph
     const MAX_LINE_HEIGHT: u32 = 150;
@@ -187,29 +196,66 @@ fn join_paragraphs(lines: &mut Vec<Line>) {
             }
         }
     }
+
+    let mut blocks = Vec::new();
+    for Line { mut frags, .. } in lines {
+        if frags.len() == 1 {
+            let frag = frags.pop().unwrap();
+            blocks.push(Block::Text(frag.font, frag.text));
+        } else {
+            let font = frags[0].font.clone();
+            assert!(frags.iter().all(|f| f.font == font));
+            let text = frags.into_iter().map(|f| f.text).collect();
+            let row = (font, text);
+            if let Some(Block::Table(prev)) = blocks.last_mut() {
+                prev.push(row);
+            } else {
+                blocks.push(Block::Table(vec![row]));
+            }
+        }
+    }
+    blocks
 }
 
 /// Dump self as Markdown.
-fn render(lines: &[Line]) {
-    for line in lines {
-        if line.frags.len() == 1 {
-            let frag = &line.frags[0];
-            match frag.font {
-                Font::Heading => println!("# {}\n", frag.text),
-                Font::SubHeading => println!("## {}\n", frag.text),
-                Font::Body => println!("{}\n", frag.text),
-                Font::Code => println!("```\n{}\n```\n", frag.text),
-                Font::Unknown(_, _) => panic!("{:?}", frag),
-            };
-        } else {
-            println!(
-                "| {} |",
-                line.frags
-                    .iter()
-                    .map(|f| f.text.as_str())
-                    .collect::<Vec<_>>()
-                    .join(" | ")
-            );
+fn render(doc: Vec<Block>) {
+    for block in doc {
+        match block {
+            Block::Text(font, text) => {
+                match font {
+                    Font::Heading => println!("# {}\n", text),
+                    Font::SubHeading => println!("## {}\n", text),
+                    Font::Body => println!("{}\n", text),
+                    Font::Code => println!("```\n{}\n```\n", text),
+                    _ => panic!("{font:?} {:?}", text),
+                };
+            }
+            Block::Table(mut rows) => {
+                if rows[0].0 == Font::Footer {
+                    continue;
+                }
+
+                if rows[0].0 == Font::TableHeading {
+                    let row = rows.remove(0);
+                    println!("| {} |", row.1.join(" | "));
+                } else {
+                    println!("|{}", " |".repeat(rows[0].1.len()));
+                };
+                println!("|{}", " --- |".repeat(rows[0].1.len()));
+
+                for (font, row) in rows {
+                    let row = match font {
+                        Font::Code => row
+                            .into_iter()
+                            .map(|s| format!("`{s}`"))
+                            .collect::<Vec<_>>(),
+                        Font::Body => row,
+                        _ => panic!("{font:?} {:?}", row),
+                    };
+                    println!("| {} |", row.join(" | "));
+                }
+                println!();
+            }
         }
     }
 }
