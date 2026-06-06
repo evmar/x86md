@@ -10,7 +10,7 @@ fn main() -> std::io::Result<()> {
     std::fs::create_dir_all(out_dir).unwrap();
     let pdf = Pdf::new(data).unwrap();
 
-    const FIRST_PAGE: usize = 118;
+    const FIRST_PAGE: usize = 119;
     const LAST_PAGE: usize = 128;
 
     // https://github.com/LaurenzV/hayro/blob/main/hayro-interpret/examples/extract_html.rs
@@ -26,7 +26,8 @@ fn main() -> std::io::Result<()> {
 
     let mut full_page = vec![];
     for page in FIRST_PAGE..=LAST_PAGE {
-        let pdf_page = &pdf.pages()[page];
+        eprintln!("processing {}", page);
+        let pdf_page = &pdf.pages()[page - 1];
         let mut device = Device::default();
         hayro_interpret::interpret_page(pdf_page, &mut context, &mut device);
         let doc = analyze(device.lines);
@@ -58,6 +59,7 @@ enum Font {
 #[derive(Debug, Clone)]
 struct Fragment {
     x: u32,
+    x2: u32,
     font: Font,
     text: String,
 }
@@ -87,7 +89,7 @@ impl Device {
     fn font_id(
         &mut self,
         glyph_transform: &kurbo::Affine,
-        glyph: &hayro_interpret::font::Glyph<'_>,
+        glyph: &hayro_interpret::font::OutlineGlyph,
         text: &str,
     ) -> Font {
         let scale = {
@@ -97,18 +99,14 @@ impl Device {
             assert_eq!(s, (c[3] * 1000.0).round() as u32);
             s
         };
-        let outline = match glyph {
-            hayro_interpret::font::Glyph::Outline(outline) => outline,
-            hayro_interpret::font::Glyph::Type3(_) => panic!(),
-        };
 
-        let key = outline.font_cache_key();
+        let key = glyph.font_cache_key();
         match self.fonts.get(&(key, scale)) {
             Some(f) => return f.clone(),
             None => {}
         };
 
-        let font_data = outline.font_data();
+        let font_data = glyph.font_data();
         let name = match &font_data {
             Some(f) => Some(f.postscript_name.as_ref().unwrap().as_str()),
             None => None,
@@ -139,40 +137,49 @@ fn analyze(mut lines: Vec<Line>) -> Vec<Block> {
 }
 
 /// For all the fragments that are within the same line, join them into a single fragment if they are close enough together.
-fn join_fragments(lines: &mut [Line]) {
+fn join_fragments(lines: &mut Vec<Line>) {
     // for computing when subsequent glyphs are part of the same span
-    // the "W" in title font is the biggest
-    const MAX_GLYPH_WIDTH: u32 = 100;
+    const MAX_GLYPH_DELTA: u32 = 30;
 
-    for line in lines {
+    for line in lines.iter_mut() {
         let mut frags = std::mem::take(&mut line.frags);
         frags.sort_by_key(|f| f.x);
         let mut joined = vec![];
-        let mut x = frags[0].x;
+        let mut x = frags[0].x2;
         let mut cur = frags[0].clone();
         for frag in frags.into_iter().skip(1) {
             if frag.font != cur.font && frag.font != Font::Unknown {
                 panic!("font mismatch {:?} vs {:?}", frag.font, cur.font);
             }
-            let delta = frag.x - x;
-            x = frag.x;
-            if delta < MAX_GLYPH_WIDTH {
+            let delta = frag.x.abs_diff(x);
+            x = frag.x2;
+            if delta < MAX_GLYPH_DELTA {
                 cur.text.push_str(&frag.text);
             } else {
+                if matches!(cur.font, Font::Unknown) && cur.text == "*" {
+                    eprintln!("warn: omitting footnote marker");
+                    continue;
+                }
                 joined.push(cur);
                 cur = frag;
             }
         }
+        if matches!(cur.font, Font::Unknown) && cur.text == "*" {
+            eprintln!("warn: omitting footnote marker");
+            continue;
+        }
         joined.push(cur);
         line.frags = joined;
     }
+
+    lines.retain(|line| !line.frags.is_empty());
 }
 
 /// For all the lines that are part of the same paragraph, join them into a single span of text if they are close enough together.
 fn join_paragraphs(mut lines: Vec<Line>) -> Vec<Block> {
     // These constants found manually :(
     // for computing when subsequent lines are part of the same paragraph
-    const MAX_LINE_HEIGHT: u32 = 150;
+    const MAX_LINE_HEIGHT: u32 = 140;
     // for computing indentation in monospace blocks
     const LEFT_MARGIN: u32 = 460;
     const MONOSPACE_WIDTH: f32 = 50.0;
@@ -219,7 +226,7 @@ fn join_paragraphs(mut lines: Vec<Line>) -> Vec<Block> {
             }
             if merged {
                 if !cur.frags.iter().all(|f| f.text.is_empty()) {
-                    panic!("merged but leftover {:?}", cur.frags);
+                    panic!("merged but leftover {:?}, prev {:?}", cur.frags, prev.frags);
                 }
                 lines.remove(i);
             }
@@ -230,6 +237,9 @@ fn join_paragraphs(mut lines: Vec<Line>) -> Vec<Block> {
     for Line { mut frags, .. } in lines {
         if frags.len() == 1 {
             let frag = frags.pop().unwrap();
+            if matches!(frag.font, Font::Unknown) {
+                panic!();
+            }
             blocks.push(Block::Text(frag.font, frag.text));
         } else {
             let font = frags[0].font.clone();
@@ -259,6 +269,7 @@ fn render(w: &mut dyn std::io::Write, doc: Vec<Block>) -> std::io::Result<()> {
                     Font::Heading => writeln!(w, "# {}\n", text)?,
                     Font::SubHeading => writeln!(w, "## {}\n", text)?,
                     Font::Body => writeln!(w, "{}\n", text)?,
+                    Font::TableHeading => writeln!(w, "**{}**\n", text)?,
                     Font::Code => writeln!(w, "```\n{}\n```\n", text)?,
                     _ => panic!("{font:?} {:?}", text),
                 };
@@ -341,11 +352,19 @@ impl hayro_interpret::Device<'_> for Device {
             None => format!("??"),
         };
         assert!(!text.is_empty());
+
+        let glyph = match glyph {
+            hayro_interpret::font::Glyph::Outline(outline) => outline,
+            hayro_interpret::font::Glyph::Type3(_) => panic!(),
+        };
+
         let font = self.font_id(&glyph_transform, glyph, &text);
 
         // _transform always identity
         let pos = glyph_transform.translation();
         let x = (pos.x * 10.0) as u32;
+        let advance = glyph.advance_width().unwrap_or(0.0) as u32 / 10;
+        let x2 = x + advance;
         let y = (pos.y * 10.0) as u32;
 
         let line = match self.lines.binary_search_by_key(&y, |l| l.y) {
@@ -355,7 +374,7 @@ impl hayro_interpret::Device<'_> for Device {
                 &mut self.lines[i]
             }
         };
-        line.frags.push(Fragment { x, font, text });
+        line.frags.push(Fragment { x, x2, font, text });
     }
 
     fn draw_image(&mut self, _image: hayro_interpret::Image<'_, '_>, _transform: kurbo::Affine) {
