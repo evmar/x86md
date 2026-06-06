@@ -1,123 +1,145 @@
-use pdf::content::{Matrix, Op, TextDrawAdjusted};
+use std::collections::HashMap;
 
-#[derive(Debug)]
-struct Fragment {
-    font: pdf::primitive::Name,
-    x: f32,
-    y: f32,
-    text: String,
-}
-
-fn extract_fragments(ops: Vec<Op>) -> Vec<Fragment> {
-    let mut fragments = Vec::new();
-    let mut rects = Vec::new();
-
-    // matrix:
-    //   (a, d): font w/h
-    //   (b, c): shear (unused)
-    //   (e, f): translation x/y
-    let mut line_matrix = Matrix::default(); // start of line
-    let mut text_matrix = Matrix::default(); // current text position
-    let mut leading = 0.0;
-    let mut font = pdf::primitive::Name::from("");
-
-    for op in ops {
-        match op {
-            Op::TextFont { name, .. } => {
-                font = name;
-            }
-
-            Op::Leading { leading: value } => {
-                leading = value;
-            }
-
-            Op::SetTextMatrix { matrix } => {
-                text_matrix = matrix;
-                line_matrix = matrix;
-            }
-
-            Op::MoveTextPosition { translation } => {
-                // translation is in text units, needs to be scaled by font size
-                text_matrix.e += translation.x * line_matrix.a;
-                text_matrix.f += translation.y * line_matrix.d;
-                line_matrix = text_matrix;
-            }
-
-            Op::TextNewline => {
-                line_matrix.f -= leading * line_matrix.d;
-                text_matrix = line_matrix;
-            }
-
-            Op::TextDraw { text } => {
-                fragments.push(Fragment {
-                    font: font.clone(),
-                    x: text_matrix.e,
-                    y: text_matrix.f,
-                    text: text.to_string_lossy(),
-                });
-            }
-
-            Op::TextDrawAdjusted { array } => {
-                let mut text = String::new();
-                for item in array {
-                    match item {
-                        TextDrawAdjusted::Text(s) => {
-                            text.push_str(&format!("({})", &s.to_string_lossy()));
-                            // text.push_str(&format!("{}", &s.to_string_lossy()));
-                        }
-                        TextDrawAdjusted::Spacing(s) => {
-                            if s < -100.0 {
-                                fragments.push(Fragment {
-                                    font: font.clone(),
-                                    x: text_matrix.e,
-                                    y: text_matrix.f,
-                                    text,
-                                });
-                                text = String::new();
-                            }
-                        }
-                    }
-                }
-
-                if !text.is_empty() {
-                    fragments.push(Fragment {
-                        font: font.clone(),
-                        x: text_matrix.e,
-                        y: text_matrix.f,
-                        text,
-                    });
-                }
-            }
-
-            Op::Rect { rect } => {
-                rects.push(rect);
-            }
-
-            _ => {}
-        }
-    }
-
-    // println!("rect {:#?}", rects);
-
-    fragments
-}
+use hayro_interpret::{Context, InterpreterCache, InterpreterSettings, hayro_syntax::Pdf};
 
 fn main() {
     let args = std::env::args().collect::<Vec<_>>();
-    let file = pdf::file::FileOptions::cached().open(&args[1]).unwrap();
-    let resolver = file.resolver();
-    println!("{} pages", file.pages().count());
+    let data = std::fs::read(&args[1]).unwrap();
+    let pdf = Pdf::new(data).unwrap();
 
     let first_page = 118;
-    let page = file.get_page(first_page).unwrap();
-    let content = page.contents.as_ref().unwrap();
-    let ops = content.operations(&resolver).unwrap();
-    let mut fragments = extract_fragments(ops);
-    fragments.sort_by(|a, b| b.y.total_cmp(&a.y).then(a.x.total_cmp(&b.x)));
-    for fragment in fragments {
-        println!(
-            "{:7.2} {:7.2} {} {}",
-            fragment.x, fragment.y, fragment.font, fragment.text
-        );
+    let page = &pdf.pages()[first_page];
+
+    // https://github.com/LaurenzV/hayro/blob/main/hayro-interpret/examples/extract_html.rs
+    let settings = InterpreterSettings::default();
+    let cache = InterpreterCache::new();
+    let mut context = Context::new(
+        kurbo::Affine::IDENTITY,
+        kurbo::Rect::new(0.0, 0.0, 1.0, 1.0),
+        &cache,
+        pdf.xref(),
+        settings,
+    );
+
+    let mut device = Device::default();
+    hayro_interpret::interpret_page(page, &mut context, &mut device);
+
+    let mut by_y = HashMap::new();
+    for frag in device.frags {
+        by_y.entry(frag.pos.y).or_insert(vec![]).push(frag);
     }
+    for (y, mut frags) in by_y {
+        println!("{y}");
+        frags.sort_by_key(|f| f.pos.x);
+        let mut joined = vec![];
+        let mut x = frags[0].pos.x;
+        let mut cur = Fragment {
+            text: "".into(),
+            pos: Coord {
+                x: frags[0].pos.x,
+                y: y,
+            },
+        };
+        for frag in frags {
+            if frag.pos.x - x < 100 {
+                cur.text.push_str(&frag.text);
+            } else {
+                joined.push(cur);
+                cur = Fragment {
+                    text: frag.text,
+                    pos: Coord {
+                        x: frag.pos.x,
+                        y: y,
+                    },
+                }
+            }
+            //            println!("{} {} {:?}", frag.pos.x, frag.pos.x - x, frag.text);
+            x = frag.pos.x;
+        }
+        joined.push(cur);
+        println!("{:?}", joined);
+    }
+}
+
+#[derive(Debug)]
+struct Coord {
+    x: u32,
+    y: u32,
+}
+
+impl From<kurbo::Vec2> for Coord {
+    fn from(v: kurbo::Vec2) -> Self {
+        Coord {
+            x: (v.x * 10.0) as u32,
+            y: (v.y * 10.0) as u32,
+        }
+    }
+}
+
+#[derive(Debug)]
+struct Fragment {
+    text: String,
+    pos: Coord,
+}
+
+#[derive(Default)]
+struct Device {
+    frags: Vec<Fragment>,
+}
+
+impl hayro_interpret::Device<'_> for Device {
+    fn draw_path(
+        &mut self,
+        _path: &kurbo::BezPath,
+        _transform: kurbo::Affine,
+        _paint: &hayro_interpret::Paint<'_>,
+        _draw_mode: &hayro_interpret::PathDrawMode,
+    ) {
+        println!("TODO: path");
+    }
+
+    fn draw_glyph(
+        &mut self,
+        glyph: &hayro_interpret::font::Glyph<'_>,
+        _transform: kurbo::Affine,
+        glyph_transform: kurbo::Affine,
+        _paint: &hayro_interpret::Paint<'_>,
+        // TODO: Move this into outline glyph.
+        _draw_mode: &hayro_interpret::GlyphDrawMode,
+    ) {
+        // _transform always identity
+        use hayro_interpret::hayro_cmap::BfString;
+        let pos = glyph_transform.translation();
+        let text = match glyph.as_unicode() {
+            Some(s) => match s {
+                BfString::Char(c) => format!("{c}"),
+                BfString::String(s) => s,
+            },
+            None => format!("??"),
+        };
+        assert!(!text.is_empty());
+        self.frags.push(Fragment {
+            text,
+            pos: pos.into(),
+        });
+    }
+
+    fn draw_image(&mut self, _image: hayro_interpret::Image<'_, '_>, _transform: kurbo::Affine) {
+        todo!()
+    }
+
+    fn push_clip_path(&mut self, _clip_path: &hayro_interpret::ClipPath) {}
+    fn pop_clip_path(&mut self) {}
+
+    fn push_transparency_group(
+        &mut self,
+        _opacity: f32,
+        _mask: Option<hayro_interpret::SoftMask<'_>>,
+        _blend_mode: hayro_interpret::BlendMode,
+    ) {
+    }
+    fn pop_transparency_group(&mut self) {}
+
+    fn set_soft_mask(&mut self, _mask: Option<hayro_interpret::SoftMask<'_>>) {}
+    fn set_blend_mode(&mut self, _blend_mode: hayro_interpret::BlendMode) {}
 }

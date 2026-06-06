@@ -4,4 +4,5 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-pdf = "0.10.0"
+hayro-interpret = "0.7.0"
+kurbo = "0.13.1"
