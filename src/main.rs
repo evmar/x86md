@@ -11,7 +11,7 @@ fn main() -> std::io::Result<()> {
     let pdf = Pdf::new(data).unwrap();
 
     const FIRST_PAGE: usize = 118;
-    const LAST_PAGE: usize = 122;
+    const LAST_PAGE: usize = 140;
 
     // https://github.com/LaurenzV/hayro/blob/main/hayro-interpret/examples/extract_html.rs
     let settings = InterpreterSettings::default();
@@ -26,14 +26,17 @@ fn main() -> std::io::Result<()> {
 
     let mut full_page = vec![];
     for page in FIRST_PAGE..=LAST_PAGE {
-        let page = &pdf.pages()[page];
+        let pdf_page = &pdf.pages()[page];
         let mut device = Device::default();
-        hayro_interpret::interpret_page(page, &mut context, &mut device);
+        hayro_interpret::interpret_page(pdf_page, &mut context, &mut device);
         let doc = analyze(device.lines);
-        if matches!(doc[0], Block::Text(Font::Heading, _)) {
+        if let Block::Text(Font::Heading, title) = &doc[0] {
             if !full_page.is_empty() {
                 write_file(out_dir, std::mem::take(&mut full_page))?;
             }
+            eprintln!("{page}: {title}");
+        } else {
+            eprintln!("{page}");
         }
         full_page.extend(doc);
     }
