@@ -2,9 +2,12 @@ use std::collections::HashMap;
 
 use hayro_interpret::{Context, InterpreterCache, InterpreterSettings, hayro_syntax::Pdf};
 
-fn main() {
+fn main() -> std::io::Result<()> {
     let args = std::env::args().collect::<Vec<_>>();
     let data = std::fs::read(&args[1]).unwrap();
+    let out_dir = &args[2];
+    assert!(!out_dir.is_empty());
+    std::fs::create_dir_all(out_dir).unwrap();
     let pdf = Pdf::new(data).unwrap();
 
     const FIRST_PAGE: usize = 118;
@@ -29,13 +32,13 @@ fn main() {
         let doc = analyze(device.lines);
         if matches!(doc[0], Block::Text(Font::Heading, _)) {
             if !full_page.is_empty() {
-                render(std::mem::take(&mut full_page));
-                println!("page feed");
+                write_file(out_dir, std::mem::take(&mut full_page))?;
             }
         }
         full_page.extend(doc);
     }
-    render(std::mem::take(&mut full_page));
+    write_file(out_dir, full_page)?;
+    Ok(())
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -46,7 +49,7 @@ enum Font {
     Body,
     Code,
     Footer,
-    Unknown(String, u32),
+    Unknown,
 }
 
 #[derive(Debug, Clone)]
@@ -102,18 +105,21 @@ impl Device {
 
         let font_data = outline.font_data();
         let name = match &font_data {
-            Some(f) => f.postscript_name.as_ref().unwrap(),
-            None => "None",
+            Some(f) => Some(f.postscript_name.as_ref().unwrap().as_str()),
+            None => None,
         };
 
         let font = match (name, scale) {
-            ("NeoSansIntelMedium", 12) => Font::Heading,
-            ("NeoSansIntelMedium", 10) => Font::SubHeading,
-            ("NeoSansIntelMedium", 9) => Font::TableHeading,
-            ("NeoSansIntel", 8) => Font::Footer,
-            ("Verdana", 9) => Font::Body,
-            ("NeoSansIntel", 9) => Font::Code,
-            _ => Font::Unknown(name.to_string(), scale),
+            (Some("NeoSansIntelMedium"), 12) => Font::Heading,
+            (Some("NeoSansIntelMedium"), 10) => Font::SubHeading,
+            (Some("NeoSansIntelMedium"), 9) => Font::TableHeading,
+            (Some("NeoSansIntel"), 8) => Font::Footer,
+            (Some("Verdana"), 9) => Font::Body,
+            (Some("Verdana,Italic"), 9) => Font::Body,
+            (Some("NeoSansIntel"), 9) => Font::Code,
+            (Some("NeoSansIntel,Italic"), 9) => Font::Code,
+            (None, _) => Font::Unknown,
+            _ => panic!("font {name:?}, {scale}"),
         };
         self.fonts.insert((key, scale), font.clone());
         font
@@ -138,6 +144,9 @@ fn join_fragments(lines: &mut [Line]) {
         let mut x = frags[0].x;
         let mut cur = frags[0].clone();
         for frag in frags.into_iter().skip(1) {
+            if frag.font != cur.font && frag.font != Font::Unknown {
+                panic!("font mismatch {:?} vs {:?}", frag.font, cur.font);
+            }
             let delta = frag.x - x;
             x = frag.x;
             if delta < MAX_GLYPH_WIDTH {
@@ -232,16 +241,16 @@ fn join_paragraphs(mut lines: Vec<Line>) -> Vec<Block> {
     blocks
 }
 
-/// Dump self as Markdown.
-fn render(doc: Vec<Block>) {
+/// Dump a document as Markdown.
+fn render(w: &mut dyn std::io::Write, doc: Vec<Block>) -> std::io::Result<()> {
     for block in doc {
         match block {
             Block::Text(font, text) => {
                 match font {
-                    Font::Heading => println!("# {}\n", text),
-                    Font::SubHeading => println!("## {}\n", text),
-                    Font::Body => println!("{}\n", text),
-                    Font::Code => println!("```\n{}\n```\n", text),
+                    Font::Heading => writeln!(w, "# {}\n", text)?,
+                    Font::SubHeading => writeln!(w, "## {}\n", text)?,
+                    Font::Body => writeln!(w, "{}\n", text)?,
+                    Font::Code => writeln!(w, "```\n{}\n```\n", text)?,
                     _ => panic!("{font:?} {:?}", text),
                 };
             }
@@ -251,11 +260,11 @@ fn render(doc: Vec<Block>) {
                 }
                 if rows[0].0 == Font::TableHeading {
                     let row = rows.remove(0);
-                    println!("| {} |", row.1.join(" | "));
+                    writeln!(w, "| {} |", row.1.join(" | "))?;
                 } else {
-                    println!("|{}", " |".repeat(rows[0].1.len()));
+                    writeln!(w, "|{}", " |".repeat(rows[0].1.len()))?;
                 };
-                println!("|{}", " --- |".repeat(rows[0].1.len()));
+                writeln!(w, "|{}", " --- |".repeat(rows[0].1.len()))?;
 
                 for (font, row) in rows {
                     let row = match font {
@@ -266,12 +275,32 @@ fn render(doc: Vec<Block>) {
                         Font::Body => row,
                         _ => panic!("{font:?} {:?}", row),
                     };
-                    println!("| {} |", row.join(" | "));
+                    writeln!(w, "| {} |", row.join(" | "))?;
                 }
-                println!();
+                writeln!(w)?;
             }
         }
     }
+    Ok(())
+}
+
+fn write_file(out_dir: &str, doc: Vec<Block>) -> std::io::Result<String> {
+    let Block::Text(Font::Heading, title) = &doc[0] else {
+        panic!();
+    };
+    let title = title
+        .chars()
+        .take_while(|&c| c <= 'z')
+        .collect::<String>()
+        .to_ascii_lowercase();
+
+    let path = format!("{out_dir}/{title}.md");
+    {
+        let mut w = std::fs::File::create(&path)?;
+        render(&mut w, doc)?;
+    }
+    eprintln!("wrote {path}");
+    Ok(title)
 }
 
 impl hayro_interpret::Device<'_> for Device {
