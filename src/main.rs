@@ -133,33 +133,57 @@ impl Device {
 
     /// For all the lines that are part of the same paragraph, join them into a single span of text if they are close enough together.
     fn join_paragraphs(&mut self) {
+        // These constants found manually :(
         // for computing when subsequent lines are part of the same paragraph
         const MAX_LINE_HEIGHT: u32 = 150;
-
         // for computing indentation in monospace blocks
         const LEFT_MARGIN: u32 = 460;
         const MONOSPACE_WIDTH: f32 = 50.0;
 
         for i in (1..self.lines.len() - 1).rev() {
             let [cur, prev] = self.lines.get_disjoint_mut([i, i - 1]).unwrap();
-            if cur.frags.len() != 1 || prev.frags.len() != 1 {
-                continue;
-            }
-            if cur.frags[0].font != prev.frags[0].font {
-                continue;
-            }
-
-            let delta = prev.y - cur.y;
-            if delta < MAX_LINE_HEIGHT {
-                if cur.frags[0].font == Font::Code {
-                    // These constants found manually :(
-                    let indent = (cur.frags[0].x - LEFT_MARGIN) as f32 / MONOSPACE_WIDTH as f32;
-                    prev.frags[0]
-                        .text
-                        .push_str(&format!("\n{}", " ".repeat(indent as usize)));
+            if cur.frags.len() == 1 && prev.frags.len() == 1 {
+                let cur_frag = &mut cur.frags[0];
+                let prev_frag = &mut prev.frags[0];
+                if cur_frag.font != prev_frag.font {
+                    continue;
                 }
-                prev.frags[0].text.push_str(&cur.frags[0].text);
-                self.lines.remove(i);
+                let delta = prev.y - cur.y;
+                if delta < MAX_LINE_HEIGHT {
+                    if cur_frag.font == Font::Code {
+                        let indent = (cur_frag.x - LEFT_MARGIN) as f32 / MONOSPACE_WIDTH as f32;
+                        prev_frag
+                            .text
+                            .push_str(&format!("\n{}", " ".repeat(indent as usize)));
+                    }
+                    prev_frag.text.push_str(&cur_frag.text);
+                    self.lines.remove(i);
+                }
+            } else {
+                // table
+                let mut merged = false;
+                for cur_frag in cur.frags.iter_mut() {
+                    let Some(prev_frag) = prev.frags.iter_mut().find(|f| {
+                        // /10 here because it appears off by 1 sometimes
+                        f.x / 10 == cur_frag.x / 10
+                    }) else {
+                        continue;
+                    };
+                    if cur_frag.font != prev_frag.font {
+                        continue;
+                    }
+
+                    let delta = prev.y - cur.y;
+                    assert!(delta < MAX_LINE_HEIGHT);
+
+                    prev_frag.text.push_str(&cur_frag.text);
+                    cur_frag.text.clear();
+                    merged = true;
+                }
+                if merged {
+                    assert!(cur.frags.iter().all(|f| f.text.is_empty()));
+                    self.lines.remove(i);
+                }
             }
         }
     }
