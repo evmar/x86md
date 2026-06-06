@@ -36,8 +36,6 @@ fn main() -> std::io::Result<()> {
                 write_file(out_dir, std::mem::take(&mut full_page))?;
             }
             eprintln!("{page}: {title}");
-        } else {
-            eprintln!("{page}: starts with {:?}", doc[0]);
         }
         full_page.extend(doc);
     }
@@ -186,25 +184,20 @@ fn join_paragraphs(mut lines: Vec<Line>) -> Vec<Block> {
 
     for i in (1..lines.len() - 1).rev() {
         let [cur, prev] = lines.get_disjoint_mut([i, i - 1]).unwrap();
-        if cur.frags.len() == 1 && prev.frags.len() == 1 {
+        if cur.frags.len() == 1 && prev.frags.len() == 1 && cur.frags[0].font == Font::Code {
             let cur_frag = &mut cur.frags[0];
             let prev_frag = &mut prev.frags[0];
             if cur_frag.font != prev_frag.font {
                 continue;
             }
-            let delta = prev.y - cur.y;
-            if delta < MAX_LINE_HEIGHT {
-                if cur_frag.font == Font::Code {
-                    let indent = (cur_frag.x - LEFT_MARGIN) as f32 / MONOSPACE_WIDTH as f32;
-                    prev_frag
-                        .text
-                        .push_str(&format!("\n{}", " ".repeat(indent as usize)));
-                }
-                prev_frag.text.push_str(&cur_frag.text);
-                lines.remove(i);
-            }
+            let indent = (cur_frag.x - LEFT_MARGIN) as f32 / MONOSPACE_WIDTH as f32;
+            prev_frag
+                .text
+                .push_str(&format!("\n{}", " ".repeat(indent as usize)));
+            prev_frag.text.push_str(&cur_frag.text);
+            lines.remove(i);
         } else {
-            // table
+            // match up cur/prev frags by x-position, handling plain text as well as tables
             let mut merged = false;
             for cur_frag in cur.frags.iter_mut() {
                 let Some(prev_frag) = prev.frags.iter_mut().find(|f| {
