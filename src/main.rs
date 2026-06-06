@@ -7,8 +7,8 @@ fn main() {
     let data = std::fs::read(&args[1]).unwrap();
     let pdf = Pdf::new(data).unwrap();
 
-    let first_page = 118;
-    let page = &pdf.pages()[first_page];
+    const FIRST_PAGE: usize = 118;
+    const LAST_PAGE: usize = 119;
 
     // https://github.com/LaurenzV/hayro/blob/main/hayro-interpret/examples/extract_html.rs
     let settings = InterpreterSettings::default();
@@ -21,10 +21,15 @@ fn main() {
         settings,
     );
 
-    let mut device = Device::default();
-    hayro_interpret::interpret_page(page, &mut context, &mut device);
-    let doc = analyze(device.lines);
-    render(doc);
+    let mut full_page = vec![];
+    for page in FIRST_PAGE..=LAST_PAGE {
+        let page = &pdf.pages()[page];
+        let mut device = Device::default();
+        hayro_interpret::interpret_page(page, &mut context, &mut device);
+        let doc = analyze(device.lines);
+        full_page.extend(doc);
+    }
+    render(full_page);
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -204,13 +209,17 @@ fn join_paragraphs(mut lines: Vec<Line>) -> Vec<Block> {
             blocks.push(Block::Text(frag.font, frag.text));
         } else {
             let font = frags[0].font.clone();
+
             assert!(frags.iter().all(|f| f.font == font));
             let text = frags.into_iter().map(|f| f.text).collect();
-            let row = (font, text);
-            if let Some(Block::Table(prev)) = blocks.last_mut() {
-                prev.push(row);
+
+            // merge row into previous table if the font matches
+            if let Some(Block::Table(prev)) = blocks.last_mut()
+                && (prev.last().unwrap().0 == Font::TableHeading || prev.last().unwrap().0 == font)
+            {
+                prev.push((font, text));
             } else {
-                blocks.push(Block::Table(vec![row]));
+                blocks.push(Block::Table(vec![(font, text)]));
             }
         }
     }
@@ -234,7 +243,6 @@ fn render(doc: Vec<Block>) {
                 if rows[0].0 == Font::Footer {
                     continue;
                 }
-
                 if rows[0].0 == Font::TableHeading {
                     let row = rows.remove(0);
                     println!("| {} |", row.1.join(" | "));
