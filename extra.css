@@ -1,0 +1,4 @@
+.wy-table-responsive table td,
+.wy-table-responsive table tr {
+    white-space: initial;
+}

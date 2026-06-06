@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+      <link rel="shortcut icon" href="../img/favicon.ico" />
+    <title>ADDSS—Add Scalar Single Precision Floating-Point Values - x86md</title>
+    <link rel="stylesheet" href="../css/theme.css" />
+    <link rel="stylesheet" href="../css/theme_extra.css" />
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github.min.css" />
+        <link href="../extra.css" rel="stylesheet" />
+    
+      <script>
+        // Current page data
+        var mkdocs_page_name = "ADDSS\u2014Add Scalar Single Precision Floating-Point Values";
+        var mkdocs_page_input_path = "addss.md";
+        var mkdocs_page_url = null;
+      </script>
+    
+    <!--[if lt IE 9]>
+      <script src="../js/html5shiv.min.js"></script>
+    <![endif]-->
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+      <script>hljs.highlightAll();</script> 
+</head>
+
+<body class="wy-body-for-nav" role="document">
+
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side stickynav">
+    <div class="wy-side-scroll">
+      <div class="wy-side-nav-search">
+          <a href=".." class="icon icon-home"> x86md
+        </a><div role="search">
+  <form id ="rtd-search-form" class="wy-form" action="../search.html" method="get">
+      <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" title="Type search term here" />
+  </form>
+</div>
+      </div>
+
+      <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="..">x86md</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../aaa/">AAA—ASCII Adjust After Addition</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../aad/">AAD—ASCII Adjust AX Before Division</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../aam/">AAM—ASCII Adjust AX After Multiply</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../aas/">AAS—ASCII Adjust AL After Subtraction</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../adc/">ADC—Add With Carry</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../adcx/">ADCX—Unsigned Integer Addition of Two Operands With Carry Flag</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../add/">ADD—Add</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../addpd/">ADDPD—Add Packed Double Precision Floating-Point Values</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../addps/">ADDPS—Add Packed Single Precision Floating-Point Values</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../addsd/">ADDSD—Add Scalar Double Precision Floating-Point Values</a>
+                </li>
+              </ul>
+              <ul class="current">
+                <li class="toctree-l1 current"><a class="reference internal current" href="#">ADDSS—Add Scalar Single Precision Floating-Point Values</a>
+    <ul class="current">
+    <li class="toctree-l2"><a class="reference internal" href="#instruction-operand-encoding">Instruction Operand Encoding</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#description">Description</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#operation">Operation</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#intel-cc-compiler-intrinsic-equivalent">Intel C/C++ Compiler Intrinsic Equivalent</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#simd-floating-point-exceptions">SIMD Floating-Point Exceptions</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#other-exceptions">Other Exceptions</a>
+    </li>
+    </ul>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../addsubpd/">ADDSUBPD—Packed Double Precision Floating-Point Add/Subtract</a>
+                </li>
+              </ul>
+      </div>
+    </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+      <nav class="wy-nav-top" role="navigation" aria-label="Mobile navigation menu">
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="..">x86md</a>
+        
+      </nav>
+      <div class="wy-nav-content">
+        <div class="rst-content"><div role="navigation" aria-label="breadcrumbs navigation">
+  <ul class="wy-breadcrumbs">
+    <li><a href=".." class="icon icon-home" aria-label="Docs"></a></li>
+      <li class="breadcrumb-item active">ADDSS—Add Scalar Single Precision Floating-Point Values</li>
+    <li class="wy-breadcrumbs-aside">
+    </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+            <div class="section" itemprop="articleBody">
+              
+                <h1 id="addssadd-scalar-single-precision-floating-point-values">ADDSS—Add Scalar Single Precision Floating-Point Values</h1>
+<table>
+<thead>
+<tr>
+<th>Opcode/Instruction</th>
+<th>Op / En</th>
+<th>64/32 bit Mode Support</th>
+<th>CPUID Feature Flag</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>F3 0F 58 /rADDSS xmm1, xmm2/m32</td>
+<td>A</td>
+<td>V/V</td>
+<td>SSE</td>
+<td>Add the low single precision floating-point value from xmm2/mem to xmm1 and store the result in xmm1.</td>
+</tr>
+<tr>
+<td>VEX.LIG.F3.0F.WIG 58 /rVADDSS xmm1,xmm2, xmm3/m32</td>
+<td>B</td>
+<td>V/V</td>
+<td>AVX</td>
+<td>Add the low single precision floating-point value from xmm3/mem to xmm2 and store the result in xmm1.</td>
+</tr>
+<tr>
+<td>EVEX.LLIG.F3.0F.W0 58 /rVADDSS xmm1{k1}{z}, xmm2, xmm3/m32{er}</td>
+<td>C</td>
+<td>V/V</td>
+<td>AVX512F</td>
+<td>Add the low single precision floating-point value from xmm3/m32 to xmm2 and store the result in xmm1with writemask k1.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="instruction-operand-encoding">Instruction Operand Encoding</h2>
+<table>
+<thead>
+<tr>
+<th>Op/En</th>
+<th>Tuple Type</th>
+<th>Operand 1</th>
+<th>Operand 2</th>
+<th>Operand 3</th>
+<th>Operand 4</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>A</td>
+<td>N/A</td>
+<td>ModRM:reg (r, w)</td>
+<td>ModRM:r/m (r)</td>
+<td>N/A</td>
+<td>N/A</td>
+</tr>
+<tr>
+<td>B</td>
+<td>N/A</td>
+<td>ModRM:reg (w)</td>
+<td>VEX.vvvv (r)</td>
+<td>ModRM:r/m (r)</td>
+<td>N/A</td>
+</tr>
+<tr>
+<td>C</td>
+<td>Tuple1 Scalar</td>
+<td>ModRM:reg (w)</td>
+<td>EVEX.vvvv (r)</td>
+<td>ModRM:r/m (r)</td>
+<td>N/A</td>
+</tr>
+</tbody>
+</table>
+<h2 id="description">Description</h2>
+<p>Adds the low single precision floating-point values from the second source operand and the first source operand, and stores the double precision floating-point result in the destination operand.</p>
+<p>The second source operand can be an XMM register or a 64-bit memory location. The first source and destination operands are XMM registers. </p>
+<p>128-bit Legacy SSE version: The first source and destination operands are the same. Bits (MAXVL-1:32) of the corresponding the destination register remain unchanged.</p>
+<p>EVEX and VEX.128 encoded version: The first source operand is encoded by EVEX.vvvv/VEX.vvvv. Bits (127:32) of the XMM register destination are copied from corresponding bits in the first source operand. Bits (MAXVL-1:128) of the destination register are zeroed.</p>
+<p>EVEX version: The low doubleword element of the destination is updated according to the writemask.</p>
+<p>Software should ensure VADDSS is encoded with VEX.L=0. Encoding VADDSS with VEX.L=1 may encounter unpre-dictable behavior across different processor generations.</p>
+<h2 id="operation">Operation</h2>
+<p>VADDSS (EVEX Encoded Versions)</p>
+<pre><code>IF (EVEX.b = 1) AND SRC2 *is a register*
+  THEN
+      SET_ROUNDING_MODE_FOR_THIS_INSTRUCTION(EVEX.RC);
+  ELSE 
+      SET_ROUNDING_MODE_FOR_THIS_INSTRUCTION(MXCSR.RC);
+FI;
+IF k1[0] or *no writemask*
+</code></pre>
+<table>
+<thead>
+<tr>
+<th></th>
+<th></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>THENELSE</td>
+<td>DEST[31:0] := SRC1[31:0] + SRC2[31:0]</td>
+</tr>
+<tr>
+<td>IF <em>merging-masking</em></td>
+<td>; merging-masking</td>
+</tr>
+</tbody>
+</table>
+<pre><code>THEN *DEST[31:0] remains unchanged*
+         ELSE   ; zeroing-masking
+             THEN DEST[31:0] := 0
+      FI;
+FI;
+DEST[127:32] := SRC1[127:32]
+DEST[MAXVL-1:128] := 0
+</code></pre>
+<p>VADDSS DEST, SRC1, SRC2 (VEX.128 Encoded Version)</p>
+<pre><code>DEST[31:0] := SRC1[31:0] + SRC2[31:0]
+DEST[127:32] := SRC1[127:32]
+DEST[MAXVL-1:128] := 0
+</code></pre>
+<p>ADDSS DEST, SRC (128-bit Legacy SSE Version)</p>
+<pre><code>DEST[31:0] := DEST[31:0] + SRC[31:0]
+DEST[MAXVL-1:32] (Unmodified)
+</code></pre>
+<h2 id="intel-cc-compiler-intrinsic-equivalent">Intel C/C++ Compiler Intrinsic Equivalent</h2>
+<pre><code>VADDSS __m128 _mm_mask_add_ss (__m128 s, __mmask8 k, __m128 a, __m128 b);
+VADDSS __m128 _mm_maskz_add_ss (__mmask8 k, __m128 a, __m128 b);
+VADDSS __m128 _mm_add_round_ss (__m128 a, __m128 b, int);
+VADDSS __m128 _mm_mask_add_round_ss (__m128 s, __mmask8 k, __m128 a, __m128 b, int);
+VADDSS __m128 _mm_maskz_add_round_ss (__mmask8 k, __m128 a, __m128 b, int);
+ADDSS __m128 _mm_add_ss (__m128 a, __m128 b);
+</code></pre>
+<h2 id="simd-floating-point-exceptions">SIMD Floating-Point Exceptions</h2>
+<p>Overflow, Underflow, Invalid, Precision, Denormal.</p>
+<h2 id="other-exceptions">Other Exceptions</h2>
+<p>VEX-encoded instruction, see Table2-20, “Type 3 Class Exception Conditions.”</p>
+<p>EVEX-encoded instruction, see Table2-47, “Type E3 Class Exception Conditions.”</p>
+              
+            </div>
+          </div><footer>
+    <div class="rst-footer-buttons" role="navigation" aria-label="Footer Navigation">
+        <a href="../addsd/" class="btn btn-neutral float-left" title="ADDSD—Add Scalar Double Precision Floating-Point Values"><span class="icon icon-circle-arrow-left"></span> Previous</a>
+        <a href="../addsubpd/" class="btn btn-neutral float-right" title="ADDSUBPD—Packed Double Precision Floating-Point Add/Subtract">Next <span class="icon icon-circle-arrow-right"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <!-- Copyright etc -->
+  </div>
+
+  Built with <a href="https://www.mkdocs.org/">MkDocs</a> using a <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>.
+</footer>
+          
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+
+  <div class="rst-versions" role="note" aria-label="Versions">
+  <span class="rst-current-version" data-toggle="rst-current-version">
+    
+        <span>
+          <a href="https://github.com/evmar/x86md/" class="fa fa-github" style="color: #fcfcfc"> GitHub</a>
+        </span>
+    
+    
+      <span><a href="../addsd/" style="color: #fcfcfc">&laquo; Previous</a></span>
+    
+    
+      <span><a href="../addsubpd/" style="color: #fcfcfc">Next &raquo;</a></span>
+    
+  </span>
+</div>
+    <script src="../js/jquery-3.6.0.min.js"></script>
+    <script>var base_url = "..";</script>
+    <script src="../js/theme_extra.js"></script>
+    <script src="../js/theme.js"></script>
+      <script src="../search/main.js"></script>
+    <script>
+        jQuery(function () {
+            SphinxRtdTheme.Navigation.enable(true);
+        });
+    </script>
+
+</body>
+</html>

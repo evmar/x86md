@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+      <link rel="shortcut icon" href="../img/favicon.ico" />
+    <title>ADDPD—Add Packed Double Precision Floating-Point Values - x86md</title>
+    <link rel="stylesheet" href="../css/theme.css" />
+    <link rel="stylesheet" href="../css/theme_extra.css" />
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github.min.css" />
+        <link href="../extra.css" rel="stylesheet" />
+    
+      <script>
+        // Current page data
+        var mkdocs_page_name = "ADDPD\u2014Add Packed Double Precision Floating-Point Values";
+        var mkdocs_page_input_path = "addpd.md";
+        var mkdocs_page_url = null;
+      </script>
+    
+    <!--[if lt IE 9]>
+      <script src="../js/html5shiv.min.js"></script>
+    <![endif]-->
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+      <script>hljs.highlightAll();</script> 
+</head>
+
+<body class="wy-body-for-nav" role="document">
+
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side stickynav">
+    <div class="wy-side-scroll">
+      <div class="wy-side-nav-search">
+          <a href=".." class="icon icon-home"> x86md
+        </a><div role="search">
+  <form id ="rtd-search-form" class="wy-form" action="../search.html" method="get">
+      <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" title="Type search term here" />
+  </form>
+</div>
+      </div>
+
+      <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="..">x86md</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../aaa/">AAA—ASCII Adjust After Addition</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../aad/">AAD—ASCII Adjust AX Before Division</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../aam/">AAM—ASCII Adjust AX After Multiply</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../aas/">AAS—ASCII Adjust AL After Subtraction</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../adc/">ADC—Add With Carry</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../adcx/">ADCX—Unsigned Integer Addition of Two Operands With Carry Flag</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../add/">ADD—Add</a>
+                </li>
+              </ul>
+              <ul class="current">
+                <li class="toctree-l1 current"><a class="reference internal current" href="#">ADDPD—Add Packed Double Precision Floating-Point Values</a>
+    <ul class="current">
+    <li class="toctree-l2"><a class="reference internal" href="#instruction-operand-encoding">Instruction Operand Encoding</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#description">Description</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#operation">Operation</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#intel-cc-compiler-intrinsic-equivalent">Intel C/C++ Compiler Intrinsic Equivalent</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#simd-floating-point-exceptions">SIMD Floating-Point Exceptions</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#other-exceptions">Other Exceptions</a>
+    </li>
+    </ul>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../addps/">ADDPS—Add Packed Single Precision Floating-Point Values</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../addsd/">ADDSD—Add Scalar Double Precision Floating-Point Values</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../addss/">ADDSS—Add Scalar Single Precision Floating-Point Values</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../addsubpd/">ADDSUBPD—Packed Double Precision Floating-Point Add/Subtract</a>
+                </li>
+              </ul>
+      </div>
+    </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+      <nav class="wy-nav-top" role="navigation" aria-label="Mobile navigation menu">
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="..">x86md</a>
+        
+      </nav>
+      <div class="wy-nav-content">
+        <div class="rst-content"><div role="navigation" aria-label="breadcrumbs navigation">
+  <ul class="wy-breadcrumbs">
+    <li><a href=".." class="icon icon-home" aria-label="Docs"></a></li>
+      <li class="breadcrumb-item active">ADDPD—Add Packed Double Precision Floating-Point Values</li>
+    <li class="wy-breadcrumbs-aside">
+    </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+            <div class="section" itemprop="articleBody">
+              
+                <h1 id="addpdadd-packed-double-precision-floating-point-values">ADDPD—Add Packed Double Precision Floating-Point Values</h1>
+<table>
+<thead>
+<tr>
+<th>Opcode/Instruction</th>
+<th>Op / En</th>
+<th>64/32 bit Mode Support</th>
+<th>CPUID Feature Flag</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>66 0F 58 /rADDPD xmm1, xmm2/m128</td>
+<td>A</td>
+<td>V/V</td>
+<td>SSE2</td>
+<td>Add packed double precision floating-point values from xmm2/mem to xmm1 and store result in xmm1.</td>
+</tr>
+<tr>
+<td>VEX.128.66.0F.WIG 58 /rVADDPD xmm1,xmm2, xmm3/m128</td>
+<td>B</td>
+<td>V/V</td>
+<td>AVX</td>
+<td>Add packed double precision floating-point values from xmm3/mem to xmm2 and store result in xmm1.</td>
+</tr>
+<tr>
+<td>VEX.256.66.0F.WIG 58 /rVADDPD ymm1, ymm2, ymm3/m256</td>
+<td>B</td>
+<td>V/V</td>
+<td>AVX</td>
+<td>Add packed double precision floating-point values from ymm3/mem to ymm2 and store result in ymm1.</td>
+</tr>
+<tr>
+<td>EVEX.128.66.0F.W1 58 /rVADDPD xmm1 {k1}{z}, xmm2, xmm3/m128/m64bcst</td>
+<td>C</td>
+<td>V/V</td>
+<td>AVX512VLAVX512F</td>
+<td>Add packed double precision floating-point values from xmm3/m128/m64bcst to xmm2 and store result in xmm1 with writemask k1.</td>
+</tr>
+<tr>
+<td>EVEX.256.66.0F.W1 58 /rVADDPD ymm1 {k1}{z}, ymm2, ymm3/m256/m64bcst</td>
+<td>C</td>
+<td>V/V</td>
+<td>AVX512VLAVX512F</td>
+<td>Add packed double precision floating-point values from ymm3/m256/m64bcst to ymm2 and store result in ymm1 with writemask k1.</td>
+</tr>
+<tr>
+<td>EVEX.512.66.0F.W1 58 /rVADDPD zmm1 {k1}{z}, zmm2, zmm3/m512/m64bcst{er}</td>
+<td>C</td>
+<td>V/V</td>
+<td>AVX512F</td>
+<td>Add packed double precision floating-point values from zmm3/m512/m64bcst to zmm2 and store result in zmm1 with writemask k1.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="instruction-operand-encoding">Instruction Operand Encoding</h2>
+<table>
+<thead>
+<tr>
+<th>Op/En</th>
+<th>Tuple Type</th>
+<th>Operand 1</th>
+<th>Operand 2</th>
+<th>Operand 3</th>
+<th>Operand 4</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>A</td>
+<td>N/A</td>
+<td>ModRM:reg (r, w)</td>
+<td>ModRM:r/m (r)</td>
+<td>N/A</td>
+<td>N/A</td>
+</tr>
+<tr>
+<td>B</td>
+<td>N/A</td>
+<td>ModRM:reg (w)</td>
+<td>VEX.vvvv (r)</td>
+<td>ModRM:r/m (r)</td>
+<td>N/A</td>
+</tr>
+<tr>
+<td>C</td>
+<td>Full</td>
+<td>ModRM:reg (w)</td>
+<td>EVEX.vvvv (r)</td>
+<td>ModRM:r/m (r)</td>
+<td>N/A</td>
+</tr>
+</tbody>
+</table>
+<h2 id="description">Description</h2>
+<p>Adds two, four or eight packed double precision floating-point values from the first source operand to the second source operand, and stores the packed double precision floating-point result in the destination operand.</p>
+<p>EVEX encoded versions: The first source operand is a ZMM/YMM/XMM register. The second source operand can be a ZMM/YMM/XMM register, a 512/256/128-bit memory location or a 512/256/128-bit vector broadcasted from a 64-bit memory location. The destination operand is a ZMM/YMM/XMM register conditionally updated with write-mask k1.</p>
+<p>VEX.256 encoded version: The first source operand is a YMM register. The second source operand can be a YMM register or a 256-bit memory location. The destination operand is a YMM register. The upper bits (MAXVL-1:256) of the corresponding ZMM register destination are zeroed.</p>
+<p>VEX.128 encoded version: the first source operand is a XMM register. The second source operand is an XMM register or 128-bit memory location. The destination operand is an XMM register. The upper bits (MAXVL-1:128) of the corresponding ZMM register destination are zeroed.</p>
+<p>128-bit Legacy SSE version: The second source can be an XMM register or an 128-bit memory location. The desti-nation is not distinct from the first source XMM register and the upper Bits (MAXVL-1:128) of the corresponding ZMM register destination are unmodified.</p>
+<h2 id="operation">Operation</h2>
+<p>VADDPD (EVEX Encoded Versions) When SRC2 Operand is a Vector Register</p>
+<pre><code>(KL, VL) = (2, 128), (4, 256), (8, 512)
+IF (VL = 512) AND (EVEX.b = 1) 
+  THEN
+      SET_ROUNDING_MODE_FOR_THIS_INSTRUCTION(EVEX.RC);
+  ELSE 
+      SET_ROUNDING_MODE_FOR_THIS_INSTRUCTION(MXCSR.RC);
+FI;
+FOR j := 0 TO KL-1
+  i := j * 64
+  IF k1[j] OR *no writemask*
+      THEN DEST[i+63:i] := SRC1[i+63:i] + SRC2[i+63:i]
+      ELSE 
+         IF *merging-masking*  ; merging-masking
+             THEN *DEST[i+63:i] remains unchanged*
+             ELSE   ; zeroing-masking
+                 DEST[i+63:i] := 0
+         FI
+  FI;
+ENDFOR
+DEST[MAXVL-1:VL] := 0
+</code></pre>
+<p>VADDPD (EVEX Encoded Versions) When SRC2 Operand is a Memory Source</p>
+<pre><code>(KL, VL) = (2, 128), (4, 256), (8, 512)
+FOR j := 0 TO KL-1
+  i := j * 64
+  IF k1[j] OR *no writemask*
+      THEN 
+         IF (EVEX.b = 1) 
+             THEN
+                 DEST[i+63:i] := SRC1[i+63:i] + SRC2[63:0]
+             ELSE 
+                 DEST[i+63:i] := SRC1[i+63:i] + SRC2[i+63:i]
+         FI;
+      ELSE 
+         IF *merging-masking*  ; merging-masking
+             THEN *DEST[i+63:i] remains unchanged*
+             ELSE   ; zeroing-masking
+                 DEST[i+63:i] := 0
+         FI
+  FI;
+ENDFOR
+DEST[MAXVL-1:VL] := 0
+</code></pre>
+<p>VADDPD (VEX.256 Encoded Version)</p>
+<pre><code>DEST[63:0] := SRC1[63:0] + SRC2[63:0]
+DEST[127:64] := SRC1[127:64] + SRC2[127:64]
+DEST[191:128] := SRC1[191:128] + SRC2[191:128]
+DEST[255:192] := SRC1[255:192] + SRC2[255:192]
+DEST[MAXVL-1:256] := 0
+.
+</code></pre>
+<p>VADDPD (VEX.128 Encoded Version)</p>
+<pre><code>DEST[63:0] := SRC1[63:0] + SRC2[63:0]
+DEST[127:64] := SRC1[127:64] + SRC2[127:64]
+DEST[MAXVL-1:128] := 0
+</code></pre>
+<p>ADDPD (128-bit Legacy SSE Version)</p>
+<pre><code>DEST[63:0] := DEST[63:0] + SRC[63:0]
+DEST[127:64] := DEST[127:64] + SRC[127:64]
+DEST[MAXVL-1:128] (Unmodified)
+</code></pre>
+<h2 id="intel-cc-compiler-intrinsic-equivalent">Intel C/C++ Compiler Intrinsic Equivalent</h2>
+<pre><code>VADDPD __m512d _mm512_add_pd (__m512d a, __m512d b);
+VADDPD __m512d _mm512_mask_add_pd (__m512d s, __mmask8 k, __m512d a, __m512d b);
+VADDPD __m512d _mm512_maskz_add_pd (__mmask8 k, __m512d a, __m512d b);
+VADDPD __m256d _mm256_mask_add_pd (__m256d s, __mmask8 k, __m256d a, __m256d b);
+VADDPD __m256d _mm256_maskz_add_pd (__mmask8 k, __m256d a, __m256d b);
+VADDPD __m128d _mm_mask_add_pd (__m128d s, __mmask8 k, __m128d a, __m128d b);
+VADDPD __m128d _mm_maskz_add_pd (__mmask8 k, __m128d a, __m128d b);
+VADDPD __m512d _mm512_add_round_pd (__m512d a, __m512d b, int);
+VADDPD __m512d _mm512_mask_add_round_pd (__m512d s, __mmask8 k, __m512d a, __m512d b, int);
+VADDPD __m512d _mm512_maskz_add_round_pd (__mmask8 k, __m512d a, __m512d b, int);
+ADDPD __m256d _mm256_add_pd (__m256d a, __m256d b);
+ADDPD __m128d _mm_add_pd (__m128d a, __m128d b);
+</code></pre>
+<h2 id="simd-floating-point-exceptions">SIMD Floating-Point Exceptions</h2>
+<p>Overflow, Underflow, Invalid, Precision, Denormal.</p>
+<h2 id="other-exceptions">Other Exceptions</h2>
+<p>VEX-encoded instruction, see Table2-19, “Type 2 Class Exception Conditions.”</p>
+<p>EVEX-encoded instruction, see Table2-46, “Type E2 Class Exception Conditions.”</p>
+              
+            </div>
+          </div><footer>
+    <div class="rst-footer-buttons" role="navigation" aria-label="Footer Navigation">
+        <a href="../add/" class="btn btn-neutral float-left" title="ADD—Add"><span class="icon icon-circle-arrow-left"></span> Previous</a>
+        <a href="../addps/" class="btn btn-neutral float-right" title="ADDPS—Add Packed Single Precision Floating-Point Values">Next <span class="icon icon-circle-arrow-right"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <!-- Copyright etc -->
+  </div>
+
+  Built with <a href="https://www.mkdocs.org/">MkDocs</a> using a <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>.
+</footer>
+          
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+
+  <div class="rst-versions" role="note" aria-label="Versions">
+  <span class="rst-current-version" data-toggle="rst-current-version">
+    
+        <span>
+          <a href="https://github.com/evmar/x86md/" class="fa fa-github" style="color: #fcfcfc"> GitHub</a>
+        </span>
+    
+    
+      <span><a href="../add/" style="color: #fcfcfc">&laquo; Previous</a></span>
+    
+    
+      <span><a href="../addps/" style="color: #fcfcfc">Next &raquo;</a></span>
+    
+  </span>
+</div>
+    <script src="../js/jquery-3.6.0.min.js"></script>
+    <script>var base_url = "..";</script>
+    <script src="../js/theme_extra.js"></script>
+    <script src="../js/theme.js"></script>
+      <script src="../search/main.js"></script>
+    <script>
+        jQuery(function () {
+            SphinxRtdTheme.Navigation.enable(true);
+        });
+    </script>
+
+</body>
+</html>
