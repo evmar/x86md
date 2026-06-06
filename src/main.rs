@@ -8,7 +8,7 @@ fn main() {
     let pdf = Pdf::new(data).unwrap();
 
     const FIRST_PAGE: usize = 118;
-    const LAST_PAGE: usize = 119;
+    const LAST_PAGE: usize = 122;
 
     // https://github.com/LaurenzV/hayro/blob/main/hayro-interpret/examples/extract_html.rs
     let settings = InterpreterSettings::default();
@@ -27,9 +27,15 @@ fn main() {
         let mut device = Device::default();
         hayro_interpret::interpret_page(page, &mut context, &mut device);
         let doc = analyze(device.lines);
+        if matches!(doc[0], Block::Text(Font::Heading, _)) {
+            if !full_page.is_empty() {
+                render(std::mem::take(&mut full_page));
+                println!("page feed");
+            }
+        }
         full_page.extend(doc);
     }
-    render(full_page);
+    render(std::mem::take(&mut full_page));
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -189,11 +195,11 @@ fn join_paragraphs(mut lines: Vec<Line>) -> Vec<Block> {
                 }
 
                 let delta = prev.y - cur.y;
-                assert!(delta < MAX_LINE_HEIGHT);
-
-                prev_frag.text.push_str(&cur_frag.text);
-                cur_frag.text.clear();
-                merged = true;
+                if delta < MAX_LINE_HEIGHT {
+                    prev_frag.text.push_str(&cur_frag.text);
+                    cur_frag.text.clear();
+                    merged = true;
+                }
             }
             if merged {
                 assert!(cur.frags.iter().all(|f| f.text.is_empty()));
