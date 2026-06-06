@@ -11,7 +11,7 @@ fn main() -> std::io::Result<()> {
     let pdf = Pdf::new(data).unwrap();
 
     const FIRST_PAGE: usize = 118;
-    const LAST_PAGE: usize = 140;
+    const LAST_PAGE: usize = 128;
 
     // https://github.com/LaurenzV/hayro/blob/main/hayro-interpret/examples/extract_html.rs
     let settings = InterpreterSettings::default();
@@ -36,7 +36,7 @@ fn main() -> std::io::Result<()> {
             }
             eprintln!("{page}: {title}");
         } else {
-            eprintln!("{page}");
+            eprintln!("{page}: starts with {:?}", doc[0]);
         }
         full_page.extend(doc);
     }
@@ -68,6 +68,7 @@ struct Line {
     frags: Vec<Fragment>,
 }
 
+#[derive(Debug)]
 enum Block {
     Text(Font, String),
     Table(Vec<(Font, Vec<String>)>),
@@ -87,6 +88,7 @@ impl Device {
         &mut self,
         glyph_transform: &kurbo::Affine,
         glyph: &hayro_interpret::font::Glyph<'_>,
+        text: &str,
     ) -> Font {
         let scale = {
             let c = glyph_transform.as_coeffs();
@@ -121,8 +123,9 @@ impl Device {
             (Some("Verdana,Italic"), 9) => Font::Body,
             (Some("NeoSansIntel"), 9) => Font::Code,
             (Some("NeoSansIntel,Italic"), 9) => Font::Code,
+            (Some("Arial"), 8) => Font::Unknown,
             (None, _) => Font::Unknown,
-            _ => panic!("font {name:?}, {scale}"),
+            _ => panic!("font {name:?}, {scale} in {text:?}"),
         };
         self.fonts.insert((key, scale), font.clone());
         font
@@ -138,6 +141,7 @@ fn analyze(mut lines: Vec<Line>) -> Vec<Block> {
 /// For all the fragments that are within the same line, join them into a single fragment if they are close enough together.
 fn join_fragments(lines: &mut [Line]) {
     // for computing when subsequent glyphs are part of the same span
+    // the "W" in title font is the biggest
     const MAX_GLYPH_WIDTH: u32 = 100;
 
     for line in lines {
@@ -214,7 +218,9 @@ fn join_paragraphs(mut lines: Vec<Line>) -> Vec<Block> {
                 }
             }
             if merged {
-                assert!(cur.frags.iter().all(|f| f.text.is_empty()));
+                if !cur.frags.iter().all(|f| f.text.is_empty()) {
+                    panic!("merged but leftover {:?}", cur.frags);
+                }
                 lines.remove(i);
             }
         }
@@ -276,7 +282,7 @@ fn render(w: &mut dyn std::io::Write, doc: Vec<Block>) -> std::io::Result<()> {
                             .map(|s| format!("`{s}`"))
                             .collect::<Vec<_>>(),
                         Font::Body => row,
-                        _ => panic!("{font:?} {:?}", row),
+                        _ => panic!("table unexpected font {font:?} {:?}", row),
                     };
                     writeln!(w, "| {} |", row.join(" | "))?;
                 }
@@ -326,8 +332,6 @@ impl hayro_interpret::Device<'_> for Device {
         // TODO: Move this into outline glyph.
         _draw_mode: &hayro_interpret::GlyphDrawMode,
     ) {
-        let font = self.font_id(&glyph_transform, glyph);
-
         use hayro_interpret::hayro_cmap::BfString;
         let text = match glyph.as_unicode() {
             Some(s) => match s {
@@ -337,6 +341,7 @@ impl hayro_interpret::Device<'_> for Device {
             None => format!("??"),
         };
         assert!(!text.is_empty());
+        let font = self.font_id(&glyph_transform, glyph, &text);
 
         // _transform always identity
         let pos = glyph_transform.translation();
