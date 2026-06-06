@@ -23,8 +23,8 @@ fn main() {
 
     let mut doc = Device::default();
     hayro_interpret::interpret_page(page, &mut context, &mut doc);
-    doc.postprocess();
-    doc.render();
+    postprocess(&mut doc.lines);
+    render(&doc.lines);
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -98,118 +98,118 @@ impl Device {
         self.fonts.insert((key, scale), font.clone());
         font
     }
+}
 
-    fn postprocess(&mut self) {
-        self.lines.reverse();
-        self.join_fragments();
-        self.join_paragraphs();
-    }
+fn postprocess(lines: &mut Vec<Line>) {
+    lines.reverse();
+    join_fragments(lines);
+    join_paragraphs(lines);
+}
 
-    /// For all the fragments that are within the same line, join them into a single fragment if they are close enough together.
-    fn join_fragments(&mut self) {
-        // for computing when subsequent glyphs are part of the same span
-        const MAX_GLYPH_WIDTH: u32 = 100;
+/// For all the fragments that are within the same line, join them into a single fragment if they are close enough together.
+fn join_fragments(lines: &mut [Line]) {
+    // for computing when subsequent glyphs are part of the same span
+    const MAX_GLYPH_WIDTH: u32 = 100;
 
-        for line in &mut self.lines {
-            let mut frags = std::mem::take(&mut line.frags);
-            frags.sort_by_key(|f| f.x);
-            let mut joined = vec![];
-            let mut x = frags[0].x;
-            let mut cur = frags[0].clone();
-            for frag in frags.into_iter().skip(1) {
-                let delta = frag.x - x;
-                x = frag.x;
-                if delta < MAX_GLYPH_WIDTH {
-                    cur.text.push_str(&frag.text);
-                } else {
-                    joined.push(cur);
-                    cur = frag;
-                }
+    for line in lines {
+        let mut frags = std::mem::take(&mut line.frags);
+        frags.sort_by_key(|f| f.x);
+        let mut joined = vec![];
+        let mut x = frags[0].x;
+        let mut cur = frags[0].clone();
+        for frag in frags.into_iter().skip(1) {
+            let delta = frag.x - x;
+            x = frag.x;
+            if delta < MAX_GLYPH_WIDTH {
+                cur.text.push_str(&frag.text);
+            } else {
+                joined.push(cur);
+                cur = frag;
             }
-            joined.push(cur);
-            line.frags = joined;
         }
+        joined.push(cur);
+        line.frags = joined;
     }
+}
 
-    /// For all the lines that are part of the same paragraph, join them into a single span of text if they are close enough together.
-    fn join_paragraphs(&mut self) {
-        // These constants found manually :(
-        // for computing when subsequent lines are part of the same paragraph
-        const MAX_LINE_HEIGHT: u32 = 150;
-        // for computing indentation in monospace blocks
-        const LEFT_MARGIN: u32 = 460;
-        const MONOSPACE_WIDTH: f32 = 50.0;
+/// For all the lines that are part of the same paragraph, join them into a single span of text if they are close enough together.
+fn join_paragraphs(lines: &mut Vec<Line>) {
+    // These constants found manually :(
+    // for computing when subsequent lines are part of the same paragraph
+    const MAX_LINE_HEIGHT: u32 = 150;
+    // for computing indentation in monospace blocks
+    const LEFT_MARGIN: u32 = 460;
+    const MONOSPACE_WIDTH: f32 = 50.0;
 
-        for i in (1..self.lines.len() - 1).rev() {
-            let [cur, prev] = self.lines.get_disjoint_mut([i, i - 1]).unwrap();
-            if cur.frags.len() == 1 && prev.frags.len() == 1 {
-                let cur_frag = &mut cur.frags[0];
-                let prev_frag = &mut prev.frags[0];
+    for i in (1..lines.len() - 1).rev() {
+        let [cur, prev] = lines.get_disjoint_mut([i, i - 1]).unwrap();
+        if cur.frags.len() == 1 && prev.frags.len() == 1 {
+            let cur_frag = &mut cur.frags[0];
+            let prev_frag = &mut prev.frags[0];
+            if cur_frag.font != prev_frag.font {
+                continue;
+            }
+            let delta = prev.y - cur.y;
+            if delta < MAX_LINE_HEIGHT {
+                if cur_frag.font == Font::Code {
+                    let indent = (cur_frag.x - LEFT_MARGIN) as f32 / MONOSPACE_WIDTH as f32;
+                    prev_frag
+                        .text
+                        .push_str(&format!("\n{}", " ".repeat(indent as usize)));
+                }
+                prev_frag.text.push_str(&cur_frag.text);
+                lines.remove(i);
+            }
+        } else {
+            // table
+            let mut merged = false;
+            for cur_frag in cur.frags.iter_mut() {
+                let Some(prev_frag) = prev.frags.iter_mut().find(|f| {
+                    // /10 here because it appears off by 1 sometimes
+                    f.x / 10 == cur_frag.x / 10
+                }) else {
+                    continue;
+                };
                 if cur_frag.font != prev_frag.font {
                     continue;
                 }
+
                 let delta = prev.y - cur.y;
-                if delta < MAX_LINE_HEIGHT {
-                    if cur_frag.font == Font::Code {
-                        let indent = (cur_frag.x - LEFT_MARGIN) as f32 / MONOSPACE_WIDTH as f32;
-                        prev_frag
-                            .text
-                            .push_str(&format!("\n{}", " ".repeat(indent as usize)));
-                    }
-                    prev_frag.text.push_str(&cur_frag.text);
-                    self.lines.remove(i);
-                }
-            } else {
-                // table
-                let mut merged = false;
-                for cur_frag in cur.frags.iter_mut() {
-                    let Some(prev_frag) = prev.frags.iter_mut().find(|f| {
-                        // /10 here because it appears off by 1 sometimes
-                        f.x / 10 == cur_frag.x / 10
-                    }) else {
-                        continue;
-                    };
-                    if cur_frag.font != prev_frag.font {
-                        continue;
-                    }
+                assert!(delta < MAX_LINE_HEIGHT);
 
-                    let delta = prev.y - cur.y;
-                    assert!(delta < MAX_LINE_HEIGHT);
-
-                    prev_frag.text.push_str(&cur_frag.text);
-                    cur_frag.text.clear();
-                    merged = true;
-                }
-                if merged {
-                    assert!(cur.frags.iter().all(|f| f.text.is_empty()));
-                    self.lines.remove(i);
-                }
+                prev_frag.text.push_str(&cur_frag.text);
+                cur_frag.text.clear();
+                merged = true;
+            }
+            if merged {
+                assert!(cur.frags.iter().all(|f| f.text.is_empty()));
+                lines.remove(i);
             }
         }
     }
+}
 
-    /// Dump self as Markdown.
-    fn render(&self) {
-        for line in &self.lines {
-            if line.frags.len() == 1 {
-                let frag = &line.frags[0];
-                match frag.font {
-                    Font::Heading => println!("# {}\n", frag.text),
-                    Font::SubHeading => println!("## {}\n", frag.text),
-                    Font::Body => println!("{}\n", frag.text),
-                    Font::Code => println!("```\n{}\n```\n", frag.text),
-                    Font::Unknown(_, _) => panic!("{:?}", frag),
-                };
-            } else {
-                println!(
-                    "| {} |",
-                    line.frags
-                        .iter()
-                        .map(|f| f.text.as_str())
-                        .collect::<Vec<_>>()
-                        .join(" | ")
-                );
-            }
+/// Dump self as Markdown.
+fn render(lines: &[Line]) {
+    for line in lines {
+        if line.frags.len() == 1 {
+            let frag = &line.frags[0];
+            match frag.font {
+                Font::Heading => println!("# {}\n", frag.text),
+                Font::SubHeading => println!("## {}\n", frag.text),
+                Font::Body => println!("{}\n", frag.text),
+                Font::Code => println!("```\n{}\n```\n", frag.text),
+                Font::Unknown(_, _) => panic!("{:?}", frag),
+            };
+        } else {
+            println!(
+                "| {} |",
+                line.frags
+                    .iter()
+                    .map(|f| f.text.as_str())
+                    .collect::<Vec<_>>()
+                    .join(" | ")
+            );
         }
     }
 }
