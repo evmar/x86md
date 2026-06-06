@@ -39,7 +39,6 @@ enum Font {
 #[derive(Debug, Clone)]
 struct Fragment {
     x: u32,
-    y: u32,
     font: Font,
     text: String,
 }
@@ -111,9 +110,8 @@ impl Device {
         // for computing when subsequent glyphs are part of the same span
         const MAX_GLYPH_WIDTH: u32 = 100;
 
-        let mut new_lines = vec![];
-        for line in self.lines.drain(..) {
-            let mut frags = line.frags;
+        for line in &mut self.lines {
+            let mut frags = std::mem::take(&mut line.frags);
             frags.sort_by_key(|f| f.x);
             let mut joined = vec![];
             let mut x = frags[0].x;
@@ -129,12 +127,8 @@ impl Device {
                 }
             }
             joined.push(cur);
-            new_lines.push(Line {
-                y: joined[0].y,
-                frags: joined,
-            });
+            line.frags = joined;
         }
-        self.lines = new_lines;
     }
 
     /// For all the lines that are part of the same paragraph, join them into a single span of text if they are close enough together.
@@ -240,7 +234,7 @@ impl hayro_interpret::Device<'_> for Device {
                 &mut self.lines[i]
             }
         };
-        line.frags.push(Fragment { x, y, font, text });
+        line.frags.push(Fragment { x, font, text });
     }
 
     fn draw_image(&mut self, _image: hayro_interpret::Image<'_, '_>, _transform: kurbo::Affine) {
