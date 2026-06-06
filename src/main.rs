@@ -24,44 +24,36 @@ fn main() {
     let mut device = Device::default();
     hayro_interpret::interpret_page(page, &mut context, &mut device);
 
-    let mut by_y = HashMap::new();
-    for frag in device.frags {
-        by_y.entry(frag.pos.y).or_insert(vec![]).push(frag);
-    }
-    for (y, mut frags) in by_y {
-        println!("{y}");
+    let mut lines = device.lines;
+    lines.reverse();
+    for line in lines {
+        let mut frags = line.frags;
         frags.sort_by_key(|f| f.pos.x);
         let mut joined = vec![];
         let mut x = frags[0].pos.x;
-        let mut cur = Fragment {
-            text: "".into(),
-            pos: Coord {
-                x: frags[0].pos.x,
-                y: y,
-            },
-        };
-        for frag in frags {
-            if frag.pos.x - x < 100 {
+        let mut cur = frags[0].clone();
+        for frag in frags.into_iter().skip(1) {
+            let delta = frag.pos.x - x;
+            x = frag.pos.x;
+
+            if delta < 100 {
                 cur.text.push_str(&frag.text);
             } else {
                 joined.push(cur);
-                cur = Fragment {
-                    text: frag.text,
-                    pos: Coord {
-                        x: frag.pos.x,
-                        y: y,
-                    },
-                }
+                cur = frag;
             }
             //            println!("{} {} {:?}", frag.pos.x, frag.pos.x - x, frag.text);
-            x = frag.pos.x;
         }
         joined.push(cur);
         println!("{:?}", joined);
     }
 }
 
-#[derive(Debug)]
+fn to_fixed(f: f64) -> u32 {
+    (f * 10.0) as u32
+}
+
+#[derive(Debug, Clone)]
 struct Coord {
     x: u32,
     y: u32,
@@ -70,21 +62,65 @@ struct Coord {
 impl From<kurbo::Vec2> for Coord {
     fn from(v: kurbo::Vec2) -> Self {
         Coord {
-            x: (v.x * 10.0) as u32,
-            y: (v.y * 10.0) as u32,
+            x: to_fixed(v.x),
+            y: to_fixed(v.y),
         }
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct Fragment {
-    text: String,
     pos: Coord,
+    font: usize,
+    text: String,
+}
+
+struct Line {
+    y: u32,
+    frags: Vec<Fragment>,
 }
 
 #[derive(Default)]
 struct Device {
-    frags: Vec<Fragment>,
+    fonts: Vec<String>,
+    font_ids: HashMap<(u128, u32), usize>,
+    lines: Vec<Line>,
+}
+
+impl Device {
+    fn font_id(
+        &mut self,
+        glyph_transform: &kurbo::Affine,
+        glyph: &hayro_interpret::font::Glyph<'_>,
+    ) -> usize {
+        let scale = {
+            let c = glyph_transform.as_coeffs();
+            let s = (c[0] * 1000.0).round() as u32;
+            // sanity: x/y scale match
+            assert_eq!(s, (c[3] * 1000.0).round() as u32);
+            s
+        };
+        let outline = match glyph {
+            hayro_interpret::font::Glyph::Outline(outline) => outline,
+            hayro_interpret::font::Glyph::Type3(_) => panic!(),
+        };
+
+        let key = outline.font_cache_key();
+        match self.font_ids.get(&(key, scale)) {
+            Some(f) => return f.clone(),
+            None => {}
+        };
+
+        let name = match outline.font_data() {
+            Some(f) => f.postscript_name.unwrap().clone(),
+            None => "None".into(),
+        };
+        let name = format!("{}{}", name, scale);
+        let id = self.fonts.len();
+        self.font_ids.insert((key, scale), id);
+        self.fonts.push(name);
+        id
+    }
 }
 
 impl hayro_interpret::Device<'_> for Device {
@@ -95,7 +131,7 @@ impl hayro_interpret::Device<'_> for Device {
         _paint: &hayro_interpret::Paint<'_>,
         _draw_mode: &hayro_interpret::PathDrawMode,
     ) {
-        println!("TODO: path");
+        // println!("TODO: path");
     }
 
     fn draw_glyph(
@@ -107,9 +143,9 @@ impl hayro_interpret::Device<'_> for Device {
         // TODO: Move this into outline glyph.
         _draw_mode: &hayro_interpret::GlyphDrawMode,
     ) {
-        // _transform always identity
+        let font = self.font_id(&glyph_transform, glyph);
+
         use hayro_interpret::hayro_cmap::BfString;
-        let pos = glyph_transform.translation();
         let text = match glyph.as_unicode() {
             Some(s) => match s {
                 BfString::Char(c) => format!("{c}"),
@@ -118,10 +154,23 @@ impl hayro_interpret::Device<'_> for Device {
             None => format!("??"),
         };
         assert!(!text.is_empty());
-        self.frags.push(Fragment {
-            text,
-            pos: pos.into(),
-        });
+
+        // _transform always identity
+        let pos: Coord = glyph_transform.translation().into();
+        let line = match self.lines.binary_search_by_key(&pos.y, |l| l.y) {
+            Ok(i) => &mut self.lines[i],
+            Err(i) => {
+                self.lines.insert(
+                    i,
+                    Line {
+                        y: pos.y,
+                        frags: vec![],
+                    },
+                );
+                &mut self.lines[i]
+            }
+        };
+        line.frags.push(Fragment { pos, font, text });
     }
 
     fn draw_image(&mut self, _image: hayro_interpret::Image<'_, '_>, _transform: kurbo::Affine) {
