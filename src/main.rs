@@ -21,32 +21,10 @@ fn main() {
         settings,
     );
 
-    let mut device = Device::default();
-    hayro_interpret::interpret_page(page, &mut context, &mut device);
-
-    let mut lines = device.lines;
-    lines.reverse();
-    for line in lines {
-        let mut frags = line.frags;
-        frags.sort_by_key(|f| f.pos.x);
-        let mut joined = vec![];
-        let mut x = frags[0].pos.x;
-        let mut cur = frags[0].clone();
-        for frag in frags.into_iter().skip(1) {
-            let delta = frag.pos.x - x;
-            x = frag.pos.x;
-
-            if delta < 100 {
-                cur.text.push_str(&frag.text);
-            } else {
-                joined.push(cur);
-                cur = frag;
-            }
-            //            println!("{} {} {:?}", frag.pos.x, frag.pos.x - x, frag.text);
-        }
-        joined.push(cur);
-        println!("{:?}", joined);
-    }
+    let mut doc = Doc::default();
+    hayro_interpret::interpret_page(page, &mut context, &mut doc);
+    doc.join_fragments();
+    doc.render();
 }
 
 fn to_fixed(f: f64) -> u32 {
@@ -81,13 +59,13 @@ struct Line {
 }
 
 #[derive(Default)]
-struct Device {
+struct Doc {
     fonts: Vec<String>,
     font_ids: HashMap<(u128, u32), usize>,
     lines: Vec<Line>,
 }
 
-impl Device {
+impl Doc {
     fn font_id(
         &mut self,
         glyph_transform: &kurbo::Affine,
@@ -121,9 +99,74 @@ impl Device {
         self.fonts.push(name);
         id
     }
+
+    fn font_from_id(&self, id: usize) -> &str {
+        &self.fonts[id]
+    }
+
+    fn join_fragments(&mut self) {
+        let mut new_lines = vec![];
+        for line in self.lines.drain(..).rev() {
+            let mut frags = line.frags;
+            frags.sort_by_key(|f| f.pos.x);
+            let mut joined = vec![];
+            let mut x = frags[0].pos.x;
+            let mut cur = frags[0].clone();
+            for frag in frags.into_iter().skip(1) {
+                let delta = frag.pos.x - x;
+                x = frag.pos.x;
+
+                if delta < 100 {
+                    cur.text.push_str(&frag.text);
+                } else {
+                    joined.push(cur);
+                    cur = frag;
+                }
+                //            println!("{} {} {:?}", frag.pos.x, frag.pos.x - x, frag.text);
+            }
+            joined.push(cur);
+            new_lines.push(Line {
+                y: joined[0].pos.y,
+                frags: joined,
+            });
+        }
+        self.lines = new_lines;
+    }
+
+    fn render(&self) {
+        let mut y = 10000;
+        for line in &self.lines {
+            let delta = y - line.y;
+            y = line.y;
+            if delta > 150 {
+                println!();
+            }
+            if line.frags.len() == 1 {
+                let frag = &line.frags[0];
+                let font = self.font_from_id(frag.font);
+                let header = match font {
+                    "NeoSansIntelMedium12" => "# ",
+                    "NeoSansIntelMedium10" => "## ",
+                    "Verdana9" => "",      // body text
+                    "NeoSansIntel9" => "", // code
+                    _ => panic!("{font}"),
+                };
+                println!("{header}{}", frag.text);
+            } else {
+                println!(
+                    "| {} |",
+                    line.frags
+                        .iter()
+                        .map(|f| f.text.as_str())
+                        .collect::<Vec<_>>()
+                        .join(" | ")
+                );
+            }
+        }
+    }
 }
 
-impl hayro_interpret::Device<'_> for Device {
+impl hayro_interpret::Device<'_> for Doc {
     fn draw_path(
         &mut self,
         _path: &kurbo::BezPath,
