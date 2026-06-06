@@ -2,6 +2,13 @@ use std::collections::HashMap;
 
 use hayro_interpret::{Context, InterpreterCache, InterpreterSettings, hayro_syntax::Pdf};
 
+// for computing when subsequent lines are part of the same paragraph
+const MAX_LINE_HEIGHT: u32 = 150;
+
+// for computing indentation in monospace blocks
+const LEFT_MARGIN: u32 = 460;
+const MONOSPACE_WIDTH: f32 = 50.0;
+
 fn main() {
     let args = std::env::args().collect::<Vec<_>>();
     let data = std::fs::read(&args[1]).unwrap();
@@ -23,12 +30,8 @@ fn main() {
 
     let mut doc = Doc::default();
     hayro_interpret::interpret_page(page, &mut context, &mut doc);
-    doc.join_fragments();
+    doc.postprocess();
     doc.render();
-}
-
-fn to_fixed(f: f64) -> u32 {
-    (f * 10.0) as u32
 }
 
 #[derive(Debug, Clone)]
@@ -39,6 +42,9 @@ struct Coord {
 
 impl From<kurbo::Vec2> for Coord {
     fn from(v: kurbo::Vec2) -> Self {
+        fn to_fixed(f: f64) -> u32 {
+            (f * 10.0) as u32
+        }
         Coord {
             x: to_fixed(v.x),
             y: to_fixed(v.y),
@@ -46,13 +52,23 @@ impl From<kurbo::Vec2> for Coord {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum Font {
+    Heading,
+    SubHeading,
+    Body,
+    Code,
+    Unknown(String, u32),
+}
+
 #[derive(Debug, Clone)]
 struct Fragment {
     pos: Coord,
-    font: usize,
+    font: Font,
     text: String,
 }
 
+#[derive(Debug)]
 struct Line {
     y: u32,
     frags: Vec<Fragment>,
@@ -60,8 +76,10 @@ struct Line {
 
 #[derive(Default)]
 struct Doc {
-    fonts: Vec<String>,
-    font_ids: HashMap<(u128, u32), usize>,
+    // It is pretty difficult to figure out the font of a glyph in hayro because it
+    // resolves the font rather than giving you the font id from the raw PDF format.
+    // This map is keyed off of the `(font_cache_key, scale)` of the glyphs.
+    fonts: HashMap<(u128, u32), Font>,
     lines: Vec<Line>,
 }
 
@@ -70,7 +88,7 @@ impl Doc {
         &mut self,
         glyph_transform: &kurbo::Affine,
         glyph: &hayro_interpret::font::Glyph<'_>,
-    ) -> usize {
+    ) -> Font {
         let scale = {
             let c = glyph_transform.as_coeffs();
             let s = (c[0] * 1000.0).round() as u32;
@@ -84,29 +102,37 @@ impl Doc {
         };
 
         let key = outline.font_cache_key();
-        match self.font_ids.get(&(key, scale)) {
+        match self.fonts.get(&(key, scale)) {
             Some(f) => return f.clone(),
             None => {}
         };
 
-        let name = match outline.font_data() {
-            Some(f) => f.postscript_name.unwrap().clone(),
-            None => "None".into(),
+        let font_data = outline.font_data();
+        let name = match &font_data {
+            Some(f) => f.postscript_name.as_ref().unwrap(),
+            None => "None",
         };
-        let name = format!("{}{}", name, scale);
-        let id = self.fonts.len();
-        self.font_ids.insert((key, scale), id);
-        self.fonts.push(name);
-        id
+
+        let font = match (name, scale) {
+            ("NeoSansIntelMedium", 12) => Font::Heading,
+            ("NeoSansIntelMedium", 10) => Font::SubHeading,
+            ("Verdana", 9) => Font::Body,
+            ("NeoSansIntel", 9) => Font::Code,
+            (name, scale) => Font::Unknown(name.to_string(), scale),
+        };
+        self.fonts.insert((key, scale), font.clone());
+        font
     }
 
-    fn font_from_id(&self, id: usize) -> &str {
-        &self.fonts[id]
+    fn postprocess(&mut self) {
+        self.lines.reverse();
+        self.join_fragments();
+        self.join_paragraphs();
     }
 
     fn join_fragments(&mut self) {
         let mut new_lines = vec![];
-        for line in self.lines.drain(..).rev() {
+        for line in self.lines.drain(..) {
             let mut frags = line.frags;
             frags.sort_by_key(|f| f.pos.x);
             let mut joined = vec![];
@@ -115,14 +141,12 @@ impl Doc {
             for frag in frags.into_iter().skip(1) {
                 let delta = frag.pos.x - x;
                 x = frag.pos.x;
-
                 if delta < 100 {
                     cur.text.push_str(&frag.text);
                 } else {
                     joined.push(cur);
                     cur = frag;
                 }
-                //            println!("{} {} {:?}", frag.pos.x, frag.pos.x - x, frag.text);
             }
             joined.push(cur);
             new_lines.push(Line {
@@ -133,25 +157,42 @@ impl Doc {
         self.lines = new_lines;
     }
 
-    fn render(&self) {
-        let mut y = 10000;
-        for line in &self.lines {
-            let delta = y - line.y;
-            y = line.y;
-            if delta > 150 {
-                println!();
+    fn join_paragraphs(&mut self) {
+        for i in (1..self.lines.len() - 1).rev() {
+            let [cur, prev] = self.lines.get_disjoint_mut([i, i - 1]).unwrap();
+            if cur.frags.len() != 1 || prev.frags.len() != 1 {
+                continue;
             }
+            if cur.frags[0].font != prev.frags[0].font {
+                continue;
+            }
+
+            let delta = prev.y - cur.y;
+            if delta < MAX_LINE_HEIGHT {
+                if cur.frags[0].font == Font::Code {
+                    // These constants found manually :(
+                    let indent = (cur.frags[0].pos.x - LEFT_MARGIN) as f32 / MONOSPACE_WIDTH as f32;
+                    prev.frags[0]
+                        .text
+                        .push_str(&format!("\n{}", " ".repeat(indent as usize)));
+                }
+                prev.frags[0].text.push_str(&cur.frags[0].text);
+                self.lines.remove(i);
+            }
+        }
+    }
+
+    fn render(&self) {
+        for line in &self.lines {
             if line.frags.len() == 1 {
                 let frag = &line.frags[0];
-                let font = self.font_from_id(frag.font);
-                let header = match font {
-                    "NeoSansIntelMedium12" => "# ",
-                    "NeoSansIntelMedium10" => "## ",
-                    "Verdana9" => "",      // body text
-                    "NeoSansIntel9" => "", // code
-                    _ => panic!("{font}"),
+                match frag.font {
+                    Font::Heading => println!("# {}\n", frag.text),
+                    Font::SubHeading => println!("## {}\n", frag.text),
+                    Font::Body => println!("{}\n", frag.text),
+                    Font::Code => println!("```\n{}\n```\n", frag.text),
+                    Font::Unknown(_, _) => panic!("{:?}", frag),
                 };
-                println!("{header}{}", frag.text);
             } else {
                 println!(
                     "| {} |",
