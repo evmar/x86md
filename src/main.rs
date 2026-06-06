@@ -130,8 +130,22 @@ impl Device {
 
 fn analyze(mut lines: Vec<Line>) -> Vec<Block> {
     lines.reverse();
+    join_nearby_lines(&mut lines);
     join_fragments(&mut lines);
     join_paragraphs(lines)
+}
+
+/// For any neighboring lines that have very close y values, merge them.
+/// This happens when a footnote superscript seems to throw off the y axis.
+fn join_nearby_lines(lines: &mut Vec<Line>) {
+    for i in (0..lines.len() - 1).rev() {
+        let [a, b] = lines.get_disjoint_mut([i, i + 1]).unwrap();
+        if a.y.abs_diff(b.y) < 5 {
+            a.frags.append(&mut b.frags);
+            lines.remove(i + 1);
+        }
+    }
+    lines.retain(|line| !line.frags.is_empty());
 }
 
 /// For all the fragments that are within the same line, join them into a single fragment if they are close enough together.
@@ -144,33 +158,30 @@ fn join_fragments(lines: &mut Vec<Line>) {
         frags.sort_by_key(|f| f.x);
         let mut joined = vec![];
         let mut x = frags[0].x2;
-        let mut cur = frags[0].clone();
-        for frag in frags.into_iter().skip(1) {
-            if frag.font != cur.font && frag.font != Font::Unknown {
-                panic!("font mismatch {:?} vs {:?}", frag.font, cur.font);
+        let mut prev = frags[0].clone();
+        for cur in frags.into_iter().skip(1) {
+            if cur.font != prev.font && cur.font != Font::Unknown {
+                panic!("font mismatch {:?} vs {:?}", cur.font, prev.font);
             }
-            let delta = frag.x.abs_diff(x);
-            x = frag.x2;
+            let delta = cur.x.abs_diff(x);
+            x = cur.x2;
             if delta < MAX_GLYPH_DELTA {
-                cur.text.push_str(&frag.text);
+                prev.text.push_str(&cur.text);
             } else {
-                if matches!(cur.font, Font::Unknown) && cur.text == "*" {
-                    eprintln!("warn: omitting footnote marker");
-                    continue;
-                }
-                joined.push(cur);
-                cur = frag;
+                joined.push(prev);
+                prev = cur;
             }
         }
-        if matches!(cur.font, Font::Unknown) && cur.text == "*" {
-            eprintln!("warn: omitting footnote marker");
-            continue;
-        }
-        joined.push(cur);
+        joined.push(prev);
         line.frags = joined;
     }
 
-    lines.retain(|line| !line.frags.is_empty());
+    lines.retain(|line| {
+        !line
+            .frags
+            .iter()
+            .all(|f| f.font == Font::Unknown && f.text == "*")
+    });
 }
 
 /// For all the lines that are part of the same paragraph, join them into a single span of text if they are close enough together.
