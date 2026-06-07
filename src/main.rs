@@ -224,9 +224,6 @@ fn join_fragments(lines: &mut Vec<Line>) {
 
 /// For all the lines that are part of the same paragraph, join them into a single span of text if they are close enough together.
 fn join_paragraphs(mut lines: Vec<Line>) -> Vec<Block> {
-    // These constants found manually :(
-    // for computing when subsequent lines are part of the same paragraph
-    const MAX_LINE_HEIGHT: u32 = 140;
     // for computing indentation in monospace blocks
     const LEFT_MARGIN: u32 = 460;
     const MONOSPACE_WIDTH: f32 = 50.0;
@@ -248,19 +245,27 @@ fn join_paragraphs(mut lines: Vec<Line>) -> Vec<Block> {
         } else {
             // match up cur/prev frags by x-position, handling plain text as well as tables
             let mut merged = false;
+            let left_aligned = cur.frags[0].x == LEFT_MARGIN;
             for cur_frag in cur.frags.iter_mut() {
-                let Some(prev_frag) = prev.frags.iter_mut().find(|f| {
-                    // /10 here because it appears off by 1 sometimes
-                    f.x / 10 == cur_frag.x / 10
-                }) else {
+                let Some(prev_frag) = prev
+                    .frags
+                    .iter_mut()
+                    .find(|f| f.x.abs_diff(cur_frag.x) < 10)
+                else {
                     continue;
                 };
                 if cur_frag.font != prev_frag.font {
                     continue;
                 }
 
-                let delta = prev.y - cur.y;
-                if delta < MAX_LINE_HEIGHT {
+                // If there's no text on the left, it's more likely to be a continuation of a table cell
+                // above, so relax the line height requirement a bit.
+                let max_line_height = if left_aligned { 120 } else { 150 };
+                let delta = prev.y.abs_diff(cur.y);
+                if delta < max_line_height {
+                    if !prev_frag.text.ends_with(" ") {
+                        prev_frag.text.push_str(" ");
+                    }
                     prev_frag.text.push_str(&cur_frag.text);
                     cur_frag.text.clear();
                     merged = true;
