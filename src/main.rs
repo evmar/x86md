@@ -46,7 +46,7 @@ fn main() -> std::io::Result<()> {
         let pdf_page = &pdf.pages()[page - 1];
         let mut device = Device::default();
         hayro_interpret::interpret_page(pdf_page, &mut context, &mut device);
-        let doc = analyze(device.lines);
+        let doc = analyze(device.lines, device.borders);
         if let Block::Heading(1, title) = &doc[0] {
             if !full_page.is_empty() {
                 let name = write_file(&args.out_dir, std::mem::take(&mut full_page))?;
@@ -119,6 +119,9 @@ struct Device {
     // This map is keyed off of the `(font_cache_key, scale)` of the glyphs.
     fonts: HashMap<(u128, u32), Font>,
     lines: Vec<Line>,
+
+    /// y coords of any horizontal lines, so that we never merge text across table borders.
+    borders: Vec<u32>,
 }
 
 impl Device {
@@ -166,24 +169,11 @@ impl Device {
     }
 }
 
-fn analyze(mut lines: Vec<Line>) -> Vec<Block> {
+fn analyze(mut lines: Vec<Line>, mut borders: Vec<u32>) -> Vec<Block> {
+    borders.sort();
     lines.reverse();
-    join_nearby_lines(&mut lines);
     join_fragments(&mut lines);
-    join_paragraphs(lines)
-}
-
-/// For any neighboring lines that have very close y values, merge them.
-/// This happens when a footnote superscript seems to throw off the y axis.
-fn join_nearby_lines(lines: &mut Vec<Line>) {
-    for i in (0..lines.len() - 1).rev() {
-        let [a, b] = lines.get_disjoint_mut([i, i + 1]).unwrap();
-        if a.y.abs_diff(b.y) < 5 {
-            a.frags.append(&mut b.frags);
-            lines.remove(i + 1);
-        }
-    }
-    lines.retain(|line| !line.frags.is_empty());
+    join_paragraphs(lines, borders)
 }
 
 /// For all the fragments that are within the same line, join them into a single fragment if they are close enough together.
@@ -223,7 +213,7 @@ fn join_fragments(lines: &mut Vec<Line>) {
 }
 
 /// For all the lines that are part of the same paragraph, join them into a single span of text if they are close enough together.
-fn join_paragraphs(mut lines: Vec<Line>) -> Vec<Block> {
+fn join_paragraphs(mut lines: Vec<Line>, borders: Vec<u32>) -> Vec<Block> {
     // for computing indentation in monospace blocks
     const LEFT_MARGIN: u32 = 460;
     const MONOSPACE_WIDTH: f32 = 50.0;
@@ -244,6 +234,17 @@ fn join_paragraphs(mut lines: Vec<Line>) -> Vec<Block> {
             lines.remove(i);
         } else {
             // match up cur/prev frags by x-position, handling plain text as well as tables
+
+            // If there's a border between these two lines, never merge.
+            let pos = match borders.binary_search(&cur.y) {
+                Ok(i) => i,
+                Err(i) => i,
+            };
+            let border = borders.get(pos).unwrap_or(&0);
+            if (cur.y..prev.y).contains(border) {
+                continue;
+            }
+
             let mut merged = false;
             let left_aligned = cur.frags[0].x == LEFT_MARGIN;
             for cur_frag in cur.frags.iter_mut() {
@@ -371,16 +372,6 @@ fn write_file(out_dir: &str, doc: Vec<Block>) -> std::io::Result<String> {
 }
 
 impl hayro_interpret::Device<'_> for Device {
-    fn draw_path(
-        &mut self,
-        _path: &kurbo::BezPath,
-        _transform: kurbo::Affine,
-        _paint: &hayro_interpret::Paint<'_>,
-        _draw_mode: &hayro_interpret::PathDrawMode,
-    ) {
-        // println!("TODO: path");
-    }
-
     fn draw_glyph(
         &mut self,
         glyph: &hayro_interpret::font::Glyph<'_>,
@@ -409,10 +400,10 @@ impl hayro_interpret::Device<'_> for Device {
 
         // _transform always identity
         let pos = glyph_transform.translation();
-        let x = (pos.x * 10.0) as u32;
+        let x = (pos.x * 10.0).round() as u32;
         let advance = glyph.advance_width().unwrap_or(0.0) as u32 / 10;
         let x2 = x + advance;
-        let y = (pos.y * 10.0) as u32;
+        let y = (pos.y * 10.0).round() as u32;
 
         let line = match self.lines.binary_search_by_key(&y, |l| l.y) {
             Ok(i) => &mut self.lines[i],
@@ -422,6 +413,36 @@ impl hayro_interpret::Device<'_> for Device {
             }
         };
         line.frags.push(Fragment { x, x2, font, text });
+    }
+
+    fn draw_path(
+        &mut self,
+        path: &kurbo::BezPath,
+        _transform: kurbo::Affine,
+        _paint: &hayro_interpret::Paint<'_>,
+        _draw_mode: &hayro_interpret::PathDrawMode,
+    ) {
+        for seg in path.segments() {
+            match seg {
+                kurbo::PathSeg::Line(line) => {
+                    let (x1, y1) = (
+                        (line.p0.x * 10.0).round() as u32,
+                        (line.p0.y * 10.0).round() as u32,
+                    );
+                    let (x2, y2) = (
+                        (line.p1.x * 10.0).round() as u32,
+                        (line.p1.y * 10.0).round() as u32,
+                    );
+                    let x_delta = x1.abs_diff(x2);
+                    let y_delta = y1.abs_diff(y2);
+                    assert!(x_delta == 0 || y_delta == 0);
+                    if x_delta == 0 {
+                        self.borders.push(y1);
+                    }
+                }
+                _ => {}
+            }
+        }
     }
 
     fn draw_image(&mut self, _image: hayro_interpret::Image<'_, '_>, _transform: kurbo::Affine) {
