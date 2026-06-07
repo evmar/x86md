@@ -1,0 +1,6 @@
+site_name: x86md
+docs_dir: out
+site_dir: deploy
+
+theme:
+  name: readthedocs
