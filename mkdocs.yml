@@ -4,3 +4,5 @@ site_dir: deploy
 
 theme:
   name: readthedocs
+
+repo_url: https://github.com/evmar/x86md/
