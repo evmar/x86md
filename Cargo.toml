@@ -4,5 +4,6 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+argh = { version = "0.1.19", default-features = false, features = ["help"] }
 hayro-interpret = "0.7.0"
 kurbo = "0.13.1"

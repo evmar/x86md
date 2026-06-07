@@ -2,16 +2,31 @@ use std::collections::HashMap;
 
 use hayro_interpret::{Context, InterpreterCache, InterpreterSettings, hayro_syntax::Pdf};
 
-fn main() -> std::io::Result<()> {
-    let args = std::env::args().collect::<Vec<_>>();
-    let data = std::fs::read(&args[1]).unwrap();
-    let out_dir = &args[2];
-    assert!(!out_dir.is_empty());
-    std::fs::create_dir_all(out_dir).unwrap();
-    let pdf = Pdf::new(data).unwrap();
+/// generate markdown documentation from Intel PDF manuals
+#[derive(argh::FromArgs)]
+struct Args {
+    /// path to the PDF file
+    #[argh(option)]
+    pdf: String,
 
-    const FIRST_PAGE: usize = 119;
-    const LAST_PAGE: usize = 128;
+    /// path to the output directory
+    #[argh(option)]
+    out_dir: String,
+
+    /// first page to process
+    #[argh(option)]
+    from: usize,
+
+    /// last page to process
+    #[argh(option)]
+    to: usize,
+}
+
+fn main() -> std::io::Result<()> {
+    let args: Args = argh::from_env();
+    let data = std::fs::read(args.pdf).unwrap();
+    std::fs::create_dir_all(&args.out_dir).unwrap();
+    let pdf = Pdf::new(data).unwrap();
 
     // https://github.com/LaurenzV/hayro/blob/main/hayro-interpret/examples/extract_html.rs
     let settings = InterpreterSettings::default();
@@ -26,7 +41,7 @@ fn main() -> std::io::Result<()> {
 
     let mut pages_written = vec![];
     let mut full_page = vec![];
-    for page in FIRST_PAGE..=LAST_PAGE {
+    for page in args.from..=args.to {
         eprintln!("processing {}", page);
         let pdf_page = &pdf.pages()[page - 1];
         let mut device = Device::default();
@@ -34,16 +49,16 @@ fn main() -> std::io::Result<()> {
         let doc = analyze(device.lines);
         if let Block::Heading(1, title) = &doc[0] {
             if !full_page.is_empty() {
-                let name = write_file(out_dir, std::mem::take(&mut full_page))?;
+                let name = write_file(&args.out_dir, std::mem::take(&mut full_page))?;
                 pages_written.push(name);
             }
             eprintln!("{page}: {title}");
         }
         full_page.extend(doc);
     }
-    pages_written.push(write_file(out_dir, full_page)?);
+    pages_written.push(write_file(&args.out_dir, full_page)?);
 
-    index_page(out_dir, &pages_written)?;
+    index_page(&args.out_dir, &pages_written)?;
 
     Ok(())
 }

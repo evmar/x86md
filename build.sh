@@ -2,4 +2,4 @@
 
 set -e
 
-cargo run --release ~/win/intel-instructions.pdf out
+cargo run --release -- --pdf ~/win/intel-instructions.pdf --out-dir out --from 119 --to 128
