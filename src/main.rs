@@ -264,7 +264,10 @@ fn join_paragraphs(mut lines: Vec<Line>, borders: Vec<u32>) -> Vec<Block> {
                 let max_line_height = if left_aligned { 120 } else { 150 };
                 let delta = prev.y.abs_diff(cur.y);
                 if delta < max_line_height {
-                    if !prev_frag.text.ends_with(" ") {
+                    // If we merge two sentences across two lines, we need to insert a space,
+                    // but if we merge lines that don't expect whitespace then we don't need a space.
+                    // I guess we can just guess.
+                    if prev_frag.text.ends_with(".") {
                         prev_frag.text.push_str(" ");
                     }
                     prev_frag.text.push_str(&cur_frag.text);
