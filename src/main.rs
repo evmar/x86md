@@ -2,6 +2,10 @@ use std::collections::HashMap;
 
 use hayro_interpret::{Context, InterpreterCache, InterpreterSettings, hayro_syntax::Pdf};
 
+// for computing indentation in monospace blocks
+const LEFT_MARGIN: u32 = 460;
+const MONOSPACE_WIDTH: f32 = 50.0;
+
 /// generate markdown documentation from Intel PDF manuals
 #[derive(argh::FromArgs)]
 struct Args {
@@ -143,8 +147,8 @@ impl Device {
             (Some("NeoSansIntelMedium"), 10) => Font::SubHeading,
             (Some("NeoSansIntelMedium"), 9) => Font::TableHeading,
             (Some("NeoSansIntel"), 8) => Font::Footer,
-            (Some("Verdana"), 9) => Font::Body,
-            (Some("Verdana,Italic"), 9) => Font::Body,
+            (Some("Verdana"), _) => Font::Body,
+            (Some("Verdana,Italic"), _) => Font::Body,
             (Some("NeoSansIntel"), 9) => Font::Code,
             (Some("NeoSansIntel,Italic"), 9) => Font::Code,
             (Some("Arial"), 8) => Font::Unknown,
@@ -173,6 +177,11 @@ fn join_fragments(lines: &mut Vec<Line>) {
         frags.sort_by_key(|f| f.x);
         let mut joined = vec![];
         let mut x = frags[0].x2;
+        // Sometimes code blocks will have comments spaced way out to the side,
+        // which looks like a table.  Detect it by noticing it when things are indented.
+        let indented_code =
+            frags[0].font == Font::Code && x > LEFT_MARGIN + (8 * MONOSPACE_WIDTH as u32);
+
         let mut prev = frags[0].clone();
         for cur in frags.into_iter().skip(1) {
             if cur.font != prev.font && cur.font != Font::Unknown {
@@ -181,6 +190,9 @@ fn join_fragments(lines: &mut Vec<Line>) {
             let delta = cur.x.abs_diff(x);
             x = cur.x2;
             if delta < MAX_GLYPH_DELTA {
+                prev.text.push_str(&cur.text);
+            } else if indented_code {
+                prev.text.push_str("  ");
                 prev.text.push_str(&cur.text);
             } else {
                 joined.push(prev);
@@ -201,18 +213,13 @@ fn join_fragments(lines: &mut Vec<Line>) {
 
 /// For all the lines that are part of the same paragraph, join them into a single span of text if they are close enough together.
 fn join_paragraphs(mut lines: Vec<Line>, borders: Vec<u32>) -> Vec<Block> {
-    // for computing indentation in monospace blocks
-    const LEFT_MARGIN: u32 = 460;
-    const MONOSPACE_WIDTH: f32 = 50.0;
-
     for i in (1..lines.len() - 1).rev() {
         let [cur, prev] = lines.get_disjoint_mut([i, i - 1]).unwrap();
+        let indented = cur.frags[0].x > LEFT_MARGIN + (8 * MONOSPACE_WIDTH as u32);
+
         if cur.frags.len() == 1 && prev.frags.len() == 1 && cur.frags[0].font == Font::Code {
             let cur_frag = &mut cur.frags[0];
             let prev_frag = &mut prev.frags[0];
-            if cur_frag.font != prev_frag.font {
-                continue;
-            }
             let indent = (cur_frag.x - LEFT_MARGIN) as f32 / MONOSPACE_WIDTH as f32;
             prev_frag
                 .text
@@ -233,7 +240,6 @@ fn join_paragraphs(mut lines: Vec<Line>, borders: Vec<u32>) -> Vec<Block> {
             }
 
             let mut merged = false;
-            let left_aligned = cur.frags[0].x == LEFT_MARGIN;
             for cur_frag in cur.frags.iter_mut() {
                 let Some(prev_frag) = prev
                     .frags
@@ -248,7 +254,7 @@ fn join_paragraphs(mut lines: Vec<Line>, borders: Vec<u32>) -> Vec<Block> {
 
                 // If there's no text on the left, it's more likely to be a continuation of a table cell
                 // above, so relax the line height requirement a bit.
-                let max_line_height = if left_aligned { 120 } else { 150 };
+                let max_line_height = if !indented { 120 } else { 150 };
                 let delta = prev.y.abs_diff(cur.y);
                 if delta < max_line_height {
                     // If we merge two sentences across two lines, we need to insert a space,
