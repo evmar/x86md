@@ -4,7 +4,9 @@ The Intel Software Developer's Manual Volume 2 documents each x86 machine instru
 but is only available as PDF.  This project extracts the text/tables from the PDF and
 generates Markdown and renders it to [HTML, browseable online](https://evmar.github.io/x86md/).
 
-This is just like [x86doc](https://github.com/fay59/x86doc) but:
+**Warning: output is currently incomplete and incorrect.**
+
+This is like [x86doc](https://github.com/fay59/x86doc) but:
 
 1. rewritten in Rust (tm);
 2. with Markdown output;
