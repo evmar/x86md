@@ -1,8 +1,11 @@
 site_name: x86md
+repo_url: https://github.com/evmar/x86md/
+
 docs_dir: out
 site_dir: deploy
 
 theme:
   name: readthedocs
-
-repo_url: https://github.com/evmar/x86md/
+  custom_dir: theme
+extra_css:
+  - extra.css
