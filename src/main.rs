@@ -32,7 +32,7 @@ fn main() -> std::io::Result<()> {
         let mut device = Device::default();
         hayro_interpret::interpret_page(pdf_page, &mut context, &mut device);
         let doc = analyze(device.lines);
-        if let Block::Text(Font::Heading, title) = &doc[0] {
+        if let Block::Heading(1, title) = &doc[0] {
             if !full_page.is_empty() {
                 let name = write_file(out_dir, std::mem::take(&mut full_page))?;
                 pages_written.push(name);
@@ -91,7 +91,9 @@ struct Line {
 
 #[derive(Debug)]
 enum Block {
-    Text(Font, String),
+    Heading(u32, String),
+    Text(String),
+    Code(String),
     Table(Vec<(Font, Vec<String>)>),
 }
 
@@ -265,7 +267,15 @@ fn join_paragraphs(mut lines: Vec<Line>) -> Vec<Block> {
             if matches!(frag.font, Font::Unknown) {
                 panic!();
             }
-            blocks.push(Block::Text(frag.font, frag.text));
+            match frag.font {
+                Font::Heading => blocks.push(Block::Heading(1, frag.text)),
+                Font::SubHeading => blocks.push(Block::Heading(2, frag.text)),
+                Font::TableHeading => blocks.push(Block::Text(frag.text)),
+                Font::Body => blocks.push(Block::Text(frag.text)),
+                Font::Code => blocks.push(Block::Code(frag.text)),
+                Font::Footer => {}
+                _ => panic!("{:?}", frag.font),
+            }
         } else {
             let font = frags[0].font.clone();
 
@@ -289,16 +299,10 @@ fn join_paragraphs(mut lines: Vec<Line>) -> Vec<Block> {
 fn render(w: &mut dyn std::io::Write, doc: Vec<Block>) -> std::io::Result<()> {
     for block in doc {
         match block {
-            Block::Text(font, text) => {
-                match font {
-                    Font::Heading => writeln!(w, "# {}\n", text)?,
-                    Font::SubHeading => writeln!(w, "## {}\n", text)?,
-                    Font::Body => writeln!(w, "{}\n", text)?,
-                    Font::TableHeading => writeln!(w, "**{}**\n", text)?,
-                    Font::Code => writeln!(w, "```\n{}\n```\n", text)?,
-                    _ => panic!("{font:?} {:?}", text),
-                };
-            }
+            Block::Heading(1, text) => writeln!(w, "# {}\n", text)?,
+            Block::Heading(2, text) => writeln!(w, "## {}\n", text)?,
+            Block::Text(text) => writeln!(w, "{}\n", text)?,
+            Block::Code(text) => writeln!(w, "```\n{}\n```\n", text)?,
             Block::Table(mut rows) => {
                 if rows[0].0 == Font::Footer {
                     continue;
@@ -313,24 +317,22 @@ fn render(w: &mut dyn std::io::Write, doc: Vec<Block>) -> std::io::Result<()> {
 
                 for (font, row) in rows {
                     let row = match font {
-                        Font::Code => row
-                            .into_iter()
-                            .map(|s| format!("`{s}`"))
-                            .collect::<Vec<_>>(),
-                        Font::Body => row,
+                        // Intentionally ignore code here, because it makes the HTML output look bad.
+                        Font::Body | Font::Code => row,
                         _ => panic!("table unexpected font {font:?} {:?}", row),
                     };
                     writeln!(w, "| {} |", row.join(" | "))?;
                 }
                 writeln!(w)?;
             }
+            _ => panic!("{block:?}"),
         }
     }
     Ok(())
 }
 
 fn write_file(out_dir: &str, doc: Vec<Block>) -> std::io::Result<String> {
-    let Block::Text(Font::Heading, title) = &doc[0] else {
+    let Block::Heading(1, title) = &doc[0] else {
         panic!();
     };
     let title = title
