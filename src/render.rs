@@ -45,6 +45,11 @@ impl<'a> Renderer<'a> {
     }
 }
 
+// Convert floats to fixed-point coordinates to avoid floating-point comparison.
+fn point_to_fixed(p: kurbo::Point) -> (u32, u32) {
+    ((p.x * 10.0).round() as u32, (p.y * 10.0).round() as u32)
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Font {
     Heading,
@@ -160,11 +165,9 @@ impl hayro_interpret::Device<'_> for Device {
         let font = self.font_id(&glyph_transform, glyph, &text);
 
         // _transform always identity
-        let pos = glyph_transform.translation();
-        let x = (pos.x * 10.0).round() as u32;
+        let (x, y) = point_to_fixed(glyph_transform.translation().to_point());
         let advance = glyph.advance_width().unwrap_or(0.0) as u32 / 10;
         let x2 = x + advance;
-        let y = (pos.y * 10.0).round() as u32;
 
         let line = match self.render.text_lines.binary_search_by_key(&y, |l| l.y) {
             Ok(i) => &mut self.render.text_lines[i],
@@ -188,14 +191,8 @@ impl hayro_interpret::Device<'_> for Device {
         for seg in path.segments() {
             match seg {
                 kurbo::PathSeg::Line(line) => {
-                    let (x1, y1) = (
-                        (line.p0.x * 10.0).round() as u32,
-                        (line.p0.y * 10.0).round() as u32,
-                    );
-                    let (x2, y2) = (
-                        (line.p1.x * 10.0).round() as u32,
-                        (line.p1.y * 10.0).round() as u32,
-                    );
+                    let (x1, y1) = point_to_fixed(line.p0);
+                    let (x2, y2) = point_to_fixed(line.p1);
                     let x_delta = x1.abs_diff(x2);
                     let y_delta = y1.abs_diff(y2);
                     if x_delta == 0 {
