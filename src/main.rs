@@ -217,7 +217,11 @@ fn join_paragraphs(mut text_lines: Vec<TextLine>, horiz_lines: Vec<u32>) -> Vec<
         let [cur, prev] = text_lines.get_disjoint_mut([i, i - 1]).unwrap();
         let indented = cur.frags[0].x > LEFT_MARGIN + (8 * MONOSPACE_WIDTH as u32);
 
-        if cur.frags.len() == 1 && prev.frags.len() == 1 && cur.frags[0].font == Font::Code {
+        if cur.frags.len() == 1
+            && prev.frags.len() == 1
+            && cur.frags[0].font == Font::Code
+            && prev.frags[0].font == Font::Code
+        {
             let cur_frag = &mut cur.frags[0];
             let prev_frag = &mut prev.frags[0];
             let indent = (cur_frag.x - LEFT_MARGIN) as f32 / MONOSPACE_WIDTH as f32;
