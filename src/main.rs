@@ -50,7 +50,7 @@ fn main() -> std::io::Result<()> {
         let pdf_page = &pdf.pages()[page - 1];
         let mut device = Device::default();
         hayro_interpret::interpret_page(pdf_page, &mut context, &mut device);
-        let doc = analyze(device.lines, device.borders);
+        let doc = analyze(device.text_lines, device.horiz_lines);
         if let Block::Heading(1, title) = &doc[0] {
             if !full_page.is_empty() {
                 let name = write_file(&args.out_dir, std::mem::take(&mut full_page))?;
@@ -90,7 +90,7 @@ struct Fragment {
 }
 
 #[derive(Debug)]
-struct Line {
+struct TextLine {
     y: u32,
     frags: Vec<Fragment>,
 }
@@ -109,10 +109,10 @@ struct Device {
     // resolves the font rather than giving you the font id from the raw PDF format.
     // This map is keyed off of the `(font_cache_key, scale)` of the glyphs.
     fonts: HashMap<(u128, u32), Font>,
-    lines: Vec<Line>,
+    text_lines: Vec<TextLine>,
 
     /// y coords of any horizontal lines, so that we never merge text across table borders.
-    borders: Vec<u32>,
+    horiz_lines: Vec<u32>,
 }
 
 impl Device {
@@ -160,19 +160,19 @@ impl Device {
     }
 }
 
-fn analyze(mut lines: Vec<Line>, mut borders: Vec<u32>) -> Vec<Block> {
-    borders.sort();
-    lines.reverse();
-    join_fragments(&mut lines);
-    join_paragraphs(lines, borders)
+fn analyze(mut text_lines: Vec<TextLine>, mut horiz_lines: Vec<u32>) -> Vec<Block> {
+    horiz_lines.sort();
+    text_lines.reverse();
+    join_fragments(&mut text_lines);
+    join_paragraphs(text_lines, horiz_lines)
 }
 
 /// For all the fragments that are within the same line, join them into a single fragment if they are close enough together.
-fn join_fragments(lines: &mut Vec<Line>) {
+fn join_fragments(text_lines: &mut Vec<TextLine>) {
     // for computing when subsequent glyphs are part of the same span
     const MAX_GLYPH_DELTA: u32 = 30;
 
-    for line in lines.iter_mut() {
+    for line in text_lines.iter_mut() {
         let mut frags = std::mem::take(&mut line.frags);
         frags.sort_by_key(|f| f.x);
         let mut joined = vec![];
@@ -203,7 +203,7 @@ fn join_fragments(lines: &mut Vec<Line>) {
         line.frags = joined;
     }
 
-    lines.retain(|line| {
+    text_lines.retain(|line| {
         !line
             .frags
             .iter()
@@ -212,9 +212,9 @@ fn join_fragments(lines: &mut Vec<Line>) {
 }
 
 /// For all the lines that are part of the same paragraph, join them into a single span of text if they are close enough together.
-fn join_paragraphs(mut lines: Vec<Line>, borders: Vec<u32>) -> Vec<Block> {
-    for i in (1..lines.len() - 1).rev() {
-        let [cur, prev] = lines.get_disjoint_mut([i, i - 1]).unwrap();
+fn join_paragraphs(mut text_lines: Vec<TextLine>, horiz_lines: Vec<u32>) -> Vec<Block> {
+    for i in (1..text_lines.len() - 1).rev() {
+        let [cur, prev] = text_lines.get_disjoint_mut([i, i - 1]).unwrap();
         let indented = cur.frags[0].x > LEFT_MARGIN + (8 * MONOSPACE_WIDTH as u32);
 
         if cur.frags.len() == 1 && prev.frags.len() == 1 && cur.frags[0].font == Font::Code {
@@ -225,16 +225,13 @@ fn join_paragraphs(mut lines: Vec<Line>, borders: Vec<u32>) -> Vec<Block> {
                 .text
                 .push_str(&format!("\n{}", " ".repeat(indent as usize)));
             prev_frag.text.push_str(&cur_frag.text);
-            lines.remove(i);
+            text_lines.remove(i);
         } else {
             // match up cur/prev frags by x-position, handling plain text as well as tables
 
             // If there's a border between these two lines, never merge.
-            let pos = match borders.binary_search(&cur.y) {
-                Ok(i) => i,
-                Err(i) => i,
-            };
-            let border = borders.get(pos).unwrap_or(&0);
+            let pos = horiz_lines.binary_search(&cur.y).unwrap_or_else(|i| i);
+            let border = horiz_lines.get(pos).unwrap_or(&0);
             if (cur.y..prev.y).contains(border) {
                 continue;
             }
@@ -272,13 +269,13 @@ fn join_paragraphs(mut lines: Vec<Line>, borders: Vec<u32>) -> Vec<Block> {
                 if !cur.frags.iter().all(|f| f.text.is_empty()) {
                     panic!("merged but leftover {:?}, prev {:?}", cur.frags, prev.frags);
                 }
-                lines.remove(i);
+                text_lines.remove(i);
             }
         }
     }
 
     let mut blocks = Vec::new();
-    for Line { mut frags, .. } in lines {
+    for TextLine { mut frags, .. } in text_lines {
         if frags.len() == 1 {
             let frag = frags.pop().unwrap();
             if matches!(frag.font, Font::Unknown) {
@@ -401,11 +398,11 @@ impl hayro_interpret::Device<'_> for Device {
         let x2 = x + advance;
         let y = (pos.y * 10.0).round() as u32;
 
-        let line = match self.lines.binary_search_by_key(&y, |l| l.y) {
-            Ok(i) => &mut self.lines[i],
+        let line = match self.text_lines.binary_search_by_key(&y, |l| l.y) {
+            Ok(i) => &mut self.text_lines[i],
             Err(i) => {
-                self.lines.insert(i, Line { y, frags: vec![] });
-                &mut self.lines[i]
+                self.text_lines.insert(i, TextLine { y, frags: vec![] });
+                &mut self.text_lines[i]
             }
         };
         line.frags.push(Fragment { x, x2, font, text });
@@ -433,7 +430,7 @@ impl hayro_interpret::Device<'_> for Device {
                     let y_delta = y1.abs_diff(y2);
                     assert!(x_delta == 0 || y_delta == 0);
                     if x_delta == 0 {
-                        self.borders.push(y1);
+                        self.horiz_lines.push(y1);
                     }
                 }
                 _ => {}
