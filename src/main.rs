@@ -428,9 +428,11 @@ impl hayro_interpret::Device<'_> for Device {
                     );
                     let x_delta = x1.abs_diff(x2);
                     let y_delta = y1.abs_diff(y2);
-                    assert!(x_delta == 0 || y_delta == 0);
                     if x_delta == 0 {
+                    } else if y_delta == 0 {
                         self.horiz_lines.push(y1);
+                    } else {
+                        panic!();
                     }
                 }
                 _ => {}
