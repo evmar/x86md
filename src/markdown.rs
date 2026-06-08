@@ -1,0 +1,58 @@
+//! Document to Markdown conversion.
+
+use crate::{analyze::Block, render::Font};
+
+/// Dump a document as Markdown.
+fn render(w: &mut dyn std::io::Write, doc: Vec<Block>) -> std::io::Result<()> {
+    for block in doc {
+        match block {
+            Block::Heading(1, text) => writeln!(w, "# {}\n", text)?,
+            Block::Heading(2, text) => writeln!(w, "## {}\n", text)?,
+            Block::Text(text) => writeln!(w, "{}\n", text)?,
+            Block::Code(text) => writeln!(w, "```\n{}\n```\n", text)?,
+            Block::Table(mut rows) => {
+                if rows[0].0 == Font::Footer {
+                    continue;
+                }
+                if rows[0].0 == Font::TableHeading {
+                    let row = rows.remove(0);
+                    writeln!(w, "| {} |", row.1.join(" | "))?;
+                } else {
+                    writeln!(w, "|{}", " |".repeat(rows[0].1.len()))?;
+                };
+                writeln!(w, "|{}", " --- |".repeat(rows[0].1.len()))?;
+
+                for (font, row) in rows {
+                    let row = match font {
+                        // Intentionally ignore code here, because it makes the HTML output look bad.
+                        Font::Body | Font::Code => row,
+                        _ => panic!("table unexpected font {font:?} {:?}", row),
+                    };
+                    writeln!(w, "| {} |", row.join(" | "))?;
+                }
+                writeln!(w)?;
+            }
+            _ => panic!("{block:?}"),
+        }
+    }
+    Ok(())
+}
+
+pub fn write_file(out_dir: &str, doc: Vec<Block>) -> std::io::Result<String> {
+    let Block::Heading(1, title) = &doc[0] else {
+        panic!();
+    };
+    let title = title
+        .chars()
+        .take_while(|&c| c <= 'z')
+        .collect::<String>()
+        .to_ascii_lowercase();
+
+    let path = format!("{out_dir}/{title}.md");
+    {
+        let mut w = std::fs::File::create(&path)?;
+        render(&mut w, doc)?;
+    }
+    eprintln!("wrote {path}");
+    Ok(title)
+}
