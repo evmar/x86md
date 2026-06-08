@@ -75,12 +75,23 @@ pub struct TextLine {
     pub frags: Vec<Fragment>,
 }
 
+#[derive(Debug, Clone)]
+pub struct Line {
+    pub x1: u32,
+    //pub x2: u32,
+    pub y1: u32,
+    pub y2: u32,
+}
+
 #[derive(Default)]
 pub struct Render {
     pub text_lines: Vec<TextLine>,
 
     /// y coords of any horizontal lines, so that we never merge text across table borders.
     pub horiz_lines: Vec<u32>,
+
+    /// Coords of any vertical lines, for identifying figures.
+    pub vert_lines: Vec<Line>,
 }
 
 #[derive(Default)]
@@ -103,7 +114,8 @@ impl Device {
             let c = glyph_transform.as_coeffs();
             let s = (c[0] * 1000.0).round() as u32;
             // sanity: x/y scale match
-            assert_eq!(s, (c[3] * 1000.0).round() as u32);
+            // ...apparently not in figure on page 147
+            // assert_eq!(s, (c[3] * 1000.0).round() as u32);
             s
         };
 
@@ -184,22 +196,32 @@ impl hayro_interpret::Device<'_> for Device {
     fn draw_path(
         &mut self,
         path: &kurbo::BezPath,
-        _transform: kurbo::Affine,
-        _paint: &hayro_interpret::Paint<'_>,
+        transform: kurbo::Affine,
+        paint: &hayro_interpret::Paint<'_>,
         _draw_mode: &hayro_interpret::PathDrawMode,
     ) {
+        let hayro_interpret::Paint::Color(color) = paint else {
+            panic!();
+        };
+        if color.to_rgba().to_rgba8() == hayro_interpret::color::AlphaColor::WHITE.to_rgba8() {
+            // For some reason there are white lines in the PDF; ignore.
+            return;
+        }
+
         for seg in path.segments() {
             match seg {
                 kurbo::PathSeg::Line(line) => {
-                    let (x1, y1) = point_to_fixed(line.p0);
-                    let (x2, y2) = point_to_fixed(line.p1);
+                    let (x1, y1) = point_to_fixed(transform * line.p0);
+                    let (x2, y2) = point_to_fixed(transform * line.p1);
                     let x_delta = x1.abs_diff(x2);
                     let y_delta = y1.abs_diff(y2);
                     if x_delta == 0 {
+                        let (y1, y2) = (y1.min(y2), y1.max(y2));
+                        self.render.vert_lines.push(Line { x1, y1, y2 });
                     } else if y_delta == 0 {
                         self.render.horiz_lines.push(y1);
                     } else {
-                        panic!();
+                        // part of a figure
                     }
                 }
                 _ => {}

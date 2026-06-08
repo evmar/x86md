@@ -1,6 +1,6 @@
 //! Analyze a rendered PDF page to extract Block like Heading and Table.
 
-use crate::render::{Font, Render, TextLine};
+use crate::render::{Font, Line, Render, TextLine};
 
 // for computing indentation in monospace blocks
 const LEFT_MARGIN: u32 = 460;
@@ -18,10 +18,12 @@ pub fn analyze(render: Render) -> Vec<Block> {
     let Render {
         mut text_lines,
         mut horiz_lines,
+        vert_lines,
     } = render;
-    horiz_lines.sort();
+    simplify_vert(vert_lines);
     text_lines.reverse();
     join_fragments(&mut text_lines);
+    horiz_lines.sort();
     join_paragraphs(text_lines, horiz_lines)
 }
 
@@ -169,4 +171,60 @@ fn join_paragraphs(mut text_lines: Vec<TextLine>, horiz_lines: Vec<u32>) -> Vec<
         }
     }
     blocks
+}
+
+/// Given a collection of vertical lines, return a set of just the leftmost line spans.
+fn simplify_vert(mut lines: Vec<Line>) -> Vec<Line> {
+    lines.sort_by_key(|l| l.x1);
+
+    let mut ys = vec![];
+    for line in lines.iter() {
+        ys.push(line.y1);
+        ys.push(line.y2);
+    }
+    ys.sort();
+    ys.dedup();
+
+    let mut lefts: Vec<Line> = vec![];
+    let mut cur: Option<&mut Line> = None;
+    for y in ys {
+        let x = lines
+            .iter()
+            .filter(|l| (l.y1..l.y2).contains(&y))
+            .map(|l| l.x1)
+            .min();
+
+        match (&mut cur, x) {
+            (None, None) => panic!(),
+            (Some(c), None) => {
+                c.y2 = y;
+                cur = None;
+            }
+            (None, Some(x)) => {
+                lefts.push(Line {
+                    x1: x,
+                    y1: y,
+                    y2: 0,
+                });
+                cur = lefts.last_mut();
+            }
+            (Some(c), Some(x)) => {
+                if x >= c.x1 {
+                    continue;
+                }
+                c.y2 = y;
+                lefts.push(Line {
+                    x1: x,
+                    y1: y,
+                    y2: 0,
+                });
+                cur = lefts.last_mut();
+            }
+        }
+    }
+    assert!(cur.is_none());
+
+    // drop tiny lines, seen at edges of tables
+    lefts.retain(|l| l.y2.abs_diff(l.y1) > 1);
+    lefts
 }
