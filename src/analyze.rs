@@ -18,13 +18,13 @@ pub fn analyze(render: Render) -> Vec<Block> {
     let Render {
         mut text_lines,
         mut horiz_lines,
-        vert_lines,
+        mut vert_lines,
     } = render;
-    simplify_vert(vert_lines);
+    vert_lines = simplify_vert(vert_lines);
     text_lines.reverse();
     join_fragments(&mut text_lines);
     horiz_lines.sort();
-    join_paragraphs(text_lines, horiz_lines)
+    join_paragraphs(text_lines, horiz_lines, vert_lines)
 }
 
 /// For all the fragments that are within the same line, join them into a single fragment if they are close enough together.
@@ -37,10 +37,6 @@ fn join_fragments(text_lines: &mut Vec<TextLine>) {
         frags.sort_by_key(|f| f.x);
         let mut joined = vec![];
         let mut x = frags[0].x2;
-        // Sometimes code blocks will have comments spaced way out to the side,
-        // which looks like a table.  Detect it by noticing it when things are indented.
-        let indented_code =
-            frags[0].font == Font::Code && x > LEFT_MARGIN + (8 * MONOSPACE_WIDTH as u32);
 
         let mut prev = frags[0].clone();
         for cur in frags.into_iter().skip(1) {
@@ -50,9 +46,6 @@ fn join_fragments(text_lines: &mut Vec<TextLine>) {
             let delta = cur.x.abs_diff(x);
             x = cur.x2;
             if delta < MAX_GLYPH_DELTA {
-                prev.text.push_str(&cur.text);
-            } else if indented_code {
-                prev.text.push_str("  ");
                 prev.text.push_str(&cur.text);
             } else {
                 joined.push(prev);
@@ -64,6 +57,7 @@ fn join_fragments(text_lines: &mut Vec<TextLine>) {
     }
 
     text_lines.retain(|line| {
+        // drop * footnote markers, their y pos confuses things; TODO
         !line
             .frags
             .iter()
@@ -72,68 +66,111 @@ fn join_fragments(text_lines: &mut Vec<TextLine>) {
 }
 
 /// For all the lines that are part of the same paragraph, join them into a single span of text if they are close enough together.
-fn join_paragraphs(mut text_lines: Vec<TextLine>, horiz_lines: Vec<u32>) -> Vec<Block> {
-    for i in (1..text_lines.len() - 1).rev() {
-        let [cur, prev] = text_lines.get_disjoint_mut([i, i - 1]).unwrap();
-        let indented = cur.frags[0].x > LEFT_MARGIN + (8 * MONOSPACE_WIDTH as u32);
-
-        if cur.frags.len() == 1
-            && prev.frags.len() == 1
-            && cur.frags[0].font == Font::Code
-            && prev.frags[0].font == Font::Code
-        {
-            let cur_frag = &mut cur.frags[0];
-            let prev_frag = &mut prev.frags[0];
-            let indent = (cur_frag.x - LEFT_MARGIN) as f32 / MONOSPACE_WIDTH as f32;
-            prev_frag
-                .text
-                .push_str(&format!("\n{}", " ".repeat(indent as usize)));
-            prev_frag.text.push_str(&cur_frag.text);
-            text_lines.remove(i);
-        } else {
-            // match up cur/prev frags by x-position, handling plain text as well as tables
-
-            // If there's a border between these two lines, never merge.
-            let pos = horiz_lines.binary_search(&cur.y).unwrap_or_else(|i| i);
-            let border = horiz_lines.get(pos).unwrap_or(&0);
-            if (cur.y..prev.y).contains(border) {
-                continue;
+fn join_paragraphs(
+    mut text_lines: Vec<TextLine>,
+    horiz_lines: Vec<u32>,
+    vert_lines: Vec<Line>,
+) -> Vec<Block> {
+    let trace = false;
+    // work from bottom to top, merging upwards
+    for i in (1..=text_lines.len() - 1).rev() {
+        for prev_i in (0..=i - 1).rev() {
+            let [cur, prev] = text_lines.get_disjoint_mut([i, prev_i]).unwrap();
+            if trace {
+                println!();
+                println!("{i}/{prev_i} {cur:?}");
             }
 
-            let mut merged = false;
-            for cur_frag in cur.frags.iter_mut() {
-                let Some(prev_frag) = prev
-                    .frags
-                    .iter_mut()
-                    .find(|f| f.x.abs_diff(cur_frag.x) < 10)
-                else {
-                    continue;
-                };
-                if cur_frag.font != prev_frag.font {
-                    continue;
+            // If there's a border between these two lines, never merge.
+            let horiz = horiz_lines.iter().find(|l| (cur.y..prev.y).contains(&l));
+            if horiz.is_some() {
+                if trace {
+                    println!("border {horiz:?}, abort");
                 }
+                break;
+            }
 
-                // If there's no text on the left, it's more likely to be a continuation of a table cell
-                // above, so relax the line height requirement a bit.
-                let max_line_height = if !indented { 120 } else { 150 };
-                let delta = prev.y.abs_diff(cur.y);
-                if delta < max_line_height {
+            let vert = vert_lines.iter().find(|l| (l.y1..l.y2).contains(&cur.y));
+            let in_table = vert.is_some();
+
+            let ydelta = prev.y.abs_diff(cur.y);
+            if trace {
+                println!("ydelt {ydelta} table={in_table}");
+            }
+
+            let max_line_height = if in_table { 150 } else { 130 };
+            if ydelta >= max_line_height {
+                break;
+            }
+
+            if !in_table && cur.frags[0].font == Font::Code && prev.frags[0].font == Font::Code {
+                if trace {
+                    println!("code, merge");
+                }
+                assert!(cur.frags.len() == 1);
+                if prev.frags.len() != 1 {
+                    let text = prev
+                        .frags
+                        .iter()
+                        .map(|f| f.text.as_str())
+                        .collect::<Vec<_>>()
+                        .join("  ");
+                    prev.frags[0].text = text;
+                    prev.frags.truncate(1);
+                }
+                let cur_frag = &mut cur.frags[0];
+                let prev_frag = &mut prev.frags[0];
+                let indent = (cur_frag.x - LEFT_MARGIN) as f32 / MONOSPACE_WIDTH as f32;
+                prev_frag
+                    .text
+                    .push_str(&format!("\n{}", " ".repeat(indent as usize)));
+                prev_frag.text.push_str(&cur_frag.text);
+                text_lines.remove(i);
+                break;
+            } else {
+                // match up cur/prev frags by x-position, handling plain text as well as tables
+                let mut merged = false;
+                for cur_frag in cur.frags.iter_mut() {
+                    let Some(prev_frag) = prev
+                        .frags
+                        .iter_mut()
+                        .find(|f| f.x.abs_diff(cur_frag.x) < 10)
+                    else {
+                        if trace {
+                            println!("no x match");
+                        }
+                        continue;
+                    };
+                    if cur_frag.font != prev_frag.font {
+                        if trace {
+                            println!("font change");
+                        }
+                        continue;
+                    }
+
                     // If we merge two sentences across two lines, we need to insert a space,
                     // but if we merge lines that don't expect whitespace then we don't need a space.
-                    // I guess we can just guess.
-                    if prev_frag.text.ends_with(".") {
+                    let end = prev_frag.text.chars().last().unwrap();
+                    if !['/', ' '].contains(&end) {
                         prev_frag.text.push_str(" ");
                     }
                     prev_frag.text.push_str(&cur_frag.text);
                     cur_frag.text.clear();
                     merged = true;
                 }
-            }
-            if merged {
-                if !cur.frags.iter().all(|f| f.text.is_empty()) {
-                    panic!("merged but leftover {:?}, prev {:?}", cur.frags, prev.frags);
+                if trace {
+                    println!("merged={merged:?}");
                 }
-                text_lines.remove(i);
+                if merged {
+                    if !cur.frags.iter().all(|f| f.text.is_empty()) {
+                        panic!(
+                            "merged some but had leftovers:\n  {:?}\nprev\n  {:?}",
+                            cur.frags, prev.frags
+                        );
+                    }
+                    text_lines.remove(i);
+                    break;
+                }
             }
         }
     }
