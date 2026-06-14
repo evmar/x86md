@@ -73,12 +73,32 @@ fn join_paragraphs(
 ) -> Vec<Block> {
     let trace = false;
     // work from bottom to top, merging upwards
-    for i in (1..=text_lines.len() - 1).rev() {
+    for i in (0..=text_lines.len() - 1).rev() {
+        let cur = &mut text_lines[i];
+        if trace {
+            println!();
+            println!("{i} {cur:?}");
+        }
+
+        let vert = vert_lines.iter().find(|l| (l.y1..l.y2).contains(&cur.y));
+        if let Some(vert) = vert
+            && vert.x1 > LEFT_MARGIN
+        {
+            if trace {
+                println!("dropping figure");
+            }
+            text_lines.remove(i);
+            continue;
+        }
+        let in_table = vert.is_some();
+
+        if i == 0 {
+            break;
+        }
         for prev_i in (0..=i - 1).rev() {
             let [cur, prev] = text_lines.get_disjoint_mut([i, prev_i]).unwrap();
             if trace {
-                println!();
-                println!("{i}/{prev_i} {cur:?}");
+                println!("{i}/{prev_i}");
             }
 
             // If there's a border between these two lines, never merge.
@@ -89,9 +109,6 @@ fn join_paragraphs(
                 }
                 break;
             }
-
-            let vert = vert_lines.iter().find(|l| (l.y1..l.y2).contains(&cur.y));
-            let in_table = vert.is_some();
 
             let ydelta = prev.y.abs_diff(cur.y);
             if trace {
@@ -180,7 +197,7 @@ fn join_paragraphs(
         if frags.len() == 1 {
             let frag = frags.pop().unwrap();
             if matches!(frag.font, Font::Unknown) {
-                panic!();
+                panic!("unknown font in {frag:?}");
             }
             match frag.font {
                 Font::Heading => blocks.push(Block::Heading(1, frag.text)),
@@ -197,7 +214,7 @@ fn join_paragraphs(
             assert!(frags.iter().all(|f| f.font == font));
             let text = frags.into_iter().map(|f| f.text).collect();
 
-            // merge row into previous table if the font matches
+            // merge row into existing table if the font matches
             if let Some(Block::Table(prev)) = blocks.last_mut()
                 && (prev.last().unwrap().0 == Font::TableHeading || prev.last().unwrap().0 == font)
             {
