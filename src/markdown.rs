@@ -49,20 +49,20 @@ fn render(w: &mut dyn std::io::Write, doc: Doc) -> std::io::Result<()> {
 }
 
 pub fn write_file(out_dir: &str, doc: Doc) -> std::io::Result<String> {
-    let title = doc
+    let filename = doc
         .title
         .as_ref()
         .unwrap()
         .chars()
-        .take_while(|&c| c <= 'z')
+        .take_while(|&c| c <= 'z' && c != ' ')
         .collect::<String>()
         .to_ascii_lowercase();
 
-    let path = format!("{out_dir}/{title}.md");
+    let path = format!("{out_dir}/{filename}.md");
     {
         let mut w = std::fs::File::create(&path)?;
         render(&mut w, doc)?;
     }
     println!("wrote {path}");
-    Ok(title)
+    Ok(filename)
 }
