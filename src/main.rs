@@ -1,4 +1,4 @@
-use crate::analyze::Block;
+use crate::analyze::{Block, Doc};
 
 mod analyze;
 mod markdown;
@@ -33,21 +33,32 @@ fn main() -> std::io::Result<()> {
     let mut render = render::Renderer::new(&pdf);
 
     let mut pages_written = vec![];
-    let mut full_page = vec![];
-    for page in args.from..=args.to {
-        println!("processing {}", page);
-        let parse = render.page(page);
-        let doc = analyze::analyze(parse);
-        if let Block::Heading(1, title) = &doc[0] {
-            if !full_page.is_empty() {
-                let name = markdown::write_file(&args.out_dir, std::mem::take(&mut full_page))?;
-                pages_written.push(name);
+
+    let mut docs = (args.from..=args.to)
+        .map(|page| {
+            println!("processing {}", page);
+            let r = render.page(page);
+            let blocks = analyze::analyze(r);
+            let title = if let Block::Heading(1, title) = &blocks[0] {
+                Some(title.clone())
+            } else {
+                None
+            };
+            Doc {
+                page,
+                title,
+                blocks,
             }
-            println!("{page}: {title}");
+        })
+        .peekable();
+
+    while let Some(mut doc) = docs.next() {
+        while let Some(doc2) = docs.next_if(|doc| doc.title.is_none()) {
+            doc.blocks.extend(doc2.blocks);
         }
-        full_page.extend(doc);
+        let name = markdown::write_file(&args.out_dir, doc)?;
+        pages_written.push(name);
     }
-    pages_written.push(markdown::write_file(&args.out_dir, full_page)?);
 
     std::fs::write(
         format!("{out_dir}/index.md", out_dir = &args.out_dir),

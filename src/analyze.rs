@@ -14,6 +14,13 @@ pub enum Block {
     Table(Vec<(Font, Vec<String>)>),
 }
 
+#[derive(Debug)]
+pub struct Doc {
+    pub page: usize,
+    pub title: Option<String>,
+    pub blocks: Vec<Block>,
+}
+
 pub fn analyze(render: Render) -> Vec<Block> {
     let Render {
         mut text_lines,
