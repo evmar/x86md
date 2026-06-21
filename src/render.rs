@@ -139,8 +139,10 @@ impl Device {
             (Some("Verdana"), _) => Font::Body,
             (Some("Verdana,Italic"), _) => Font::Body,
             (Some("NeoSansIntel"), 9) => Font::Code,
+            (Some("NeoSansIntel"), 10) => Font::Code,
             (Some("NeoSansIntel,Italic"), 9) => Font::Code,
-            (Some("Arial"), 8) => Font::Unknown,
+            (Some("Arial"), _) => Font::Unknown,
+            (Some("TimesNewRoman"), _) => Font::Unknown,
             (None, _) => Font::Unknown,
             _ => panic!("font {name:?}, {scale} in {text:?}"),
         };
