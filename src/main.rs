@@ -22,6 +22,10 @@ struct Args {
     /// last page to process
     #[argh(option)]
     to: usize,
+
+    /// trace formatting decisions
+    #[argh(switch)]
+    trace: bool,
 }
 
 fn main() -> std::io::Result<()> {
@@ -38,7 +42,7 @@ fn main() -> std::io::Result<()> {
         .map(|page| {
             println!("processing {}", page);
             let r = render.page(page);
-            let blocks = analyze::analyze(r);
+            let blocks = analyze::analyze(args.trace, r);
             let title = if let Block::Heading(1, title) = &blocks[0] {
                 Some(title.clone())
             } else {

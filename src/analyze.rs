@@ -21,7 +21,7 @@ pub struct Doc {
     pub blocks: Vec<Block>,
 }
 
-pub fn analyze(render: Render) -> Vec<Block> {
+pub fn analyze(trace: bool, render: Render) -> Vec<Block> {
     let Render {
         mut text_lines,
         mut horiz_lines,
@@ -31,7 +31,7 @@ pub fn analyze(render: Render) -> Vec<Block> {
     text_lines.reverse();
     join_fragments(&mut text_lines);
     horiz_lines.sort();
-    join_paragraphs(text_lines, horiz_lines, vert_lines)
+    join_paragraphs(trace, text_lines, horiz_lines, vert_lines)
 }
 
 /// For all the fragments that are within the same line, join them into a single fragment if they are close enough together.
@@ -74,11 +74,11 @@ fn join_fragments(text_lines: &mut Vec<TextLine>) {
 
 /// For all the lines that are part of the same paragraph, join them into a single span of text if they are close enough together.
 fn join_paragraphs(
+    trace: bool,
     mut text_lines: Vec<TextLine>,
     horiz_lines: Vec<u32>,
     vert_lines: Vec<Line>,
 ) -> Vec<Block> {
-    let trace = false;
     // work from bottom to top, merging upwards
     for i in (0..=text_lines.len() - 1).rev() {
         let cur = &mut text_lines[i];
