@@ -168,7 +168,7 @@ fn join_paragraphs(
                     // If we merge two sentences across two lines, we need to insert a space,
                     // but if we merge lines that don't expect whitespace then we don't need a space.
                     let end = prev_frag.text.chars().last().unwrap();
-                    if !['/', ' '].contains(&end) {
+                    if !['/', '-', ' '].contains(&end) {
                         prev_frag.text.push_str(" ");
                     }
                     prev_frag.text.push_str(&cur_frag.text);
