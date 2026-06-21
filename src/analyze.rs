@@ -210,7 +210,6 @@ fn join_paragraphs(
             }
         } else {
             let font = frags[0].font.clone();
-
             assert!(frags.iter().all(|f| f.font == font));
             let text = frags.into_iter().map(|f| f.text).collect();
 
@@ -220,6 +219,10 @@ fn join_paragraphs(
             {
                 prev.push((font, text));
             } else {
+                if matches!(font, Font::Unknown) {
+                    eprintln!("omitting unknown font {:?}", text);
+                    continue;
+                }
                 blocks.push(Block::Table(vec![(font, text)]));
             }
         }
