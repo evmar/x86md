@@ -35,7 +35,7 @@ fn main() -> std::io::Result<()> {
     let mut pages_written = vec![];
     let mut full_page = vec![];
     for page in args.from..=args.to {
-        eprintln!("processing {}", page);
+        println!("processing {}", page);
         let parse = render.page(page);
         let doc = analyze::analyze(parse);
         if let Block::Heading(1, title) = &doc[0] {
@@ -43,7 +43,7 @@ fn main() -> std::io::Result<()> {
                 let name = markdown::write_file(&args.out_dir, std::mem::take(&mut full_page))?;
                 pages_written.push(name);
             }
-            eprintln!("{page}: {title}");
+            println!("{page}: {title}");
         }
         full_page.extend(doc);
     }

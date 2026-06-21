@@ -53,6 +53,6 @@ pub fn write_file(out_dir: &str, doc: Vec<Block>) -> std::io::Result<String> {
         let mut w = std::fs::File::create(&path)?;
         render(&mut w, doc)?;
     }
-    eprintln!("wrote {path}");
+    println!("wrote {path}");
     Ok(title)
 }
